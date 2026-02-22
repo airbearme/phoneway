@@ -4,17 +4,19 @@
  */
 
 const CACHE  = 'phoneway-v1.0';
+// Use relative paths so the SW works both on root and on a sub-path (GitHub Pages)
+const BASE = self.registration.scope;
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/css/style.css',
-  '/js/kalman.js',
-  '/js/sensors.js',
-  '/js/audio.js',
-  '/js/display.js',
-  '/js/app.js',
-  '/icons/icon.svg',
+  BASE,
+  BASE + 'index.html',
+  BASE + 'manifest.json',
+  BASE + 'css/style.css',
+  BASE + 'js/kalman.js',
+  BASE + 'js/sensors.js',
+  BASE + 'js/audio.js',
+  BASE + 'js/display.js',
+  BASE + 'js/app.js',
+  BASE + 'icons/icon.svg',
 ];
 
 self.addEventListener('install', e => {

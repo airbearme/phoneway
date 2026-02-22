@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title"        content="Phoneway"/>
   <meta name="theme-color"                       content="#c9a227"/>
   <title>Phoneway — Precision Scale</title>
-  <link rel="manifest" href="/manifest.json"/>
-  <link rel="apple-touch-icon" href="/icons/icon.svg"/>
-  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icons/icon.svg"/>
+  <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
 
@@ -316,9 +316,87 @@
 <div class="toast" id="toast"></div>
 
 
+<!-- ── PWA Install Banner ────────────────────────────────────── -->
+<div id="installBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;
+  background:linear-gradient(135deg,#1a1000,#2a1800);
+  border-top:1px solid #c9a227;padding:12px 16px;z-index:500;
+  display:none;align-items:center;gap:12px;max-width:430px;margin:0 auto">
+  <div style="flex:1">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;font-weight:700;
+      letter-spacing:2px;color:#e8c84a;margin-bottom:2px">INSTALL PHONEWAY</div>
+    <div style="font-family:monospace;font-size:8px;color:#777;letter-spacing:1px">
+      Add to home screen for full scale experience
+    </div>
+  </div>
+  <button id="installBtn" style="background:linear-gradient(135deg,#7a5000,#e8c84a,#f5d87a,#e8c84a,#7a5400);
+    border:none;border-radius:8px;padding:8px 14px;font-family:'Orbitron',monospace;
+    font-size:8px;font-weight:700;letter-spacing:2px;color:#1a0d00;cursor:pointer;
+    box-shadow:0 2px 8px rgba(201,162,39,.7)">INSTALL</button>
+  <button id="installDismiss" style="background:transparent;border:none;color:#444;
+    font-size:18px;cursor:pointer;padding:0 4px">×</button>
+</div>
+
+<!-- ── iOS Install Hint (Safari only) ──────────────────────── -->
+<div id="iosHint" style="display:none;position:fixed;bottom:0;left:0;right:0;
+  background:#1a1000;border-top:1px solid #c9a227;padding:12px 16px;z-index:500;
+  font-family:monospace;font-size:8px;color:#888;letter-spacing:1px;
+  text-align:center;max-width:430px;margin:0 auto">
+  Tap <strong style="color:#e8c84a">Share ⬆</strong> then
+  <strong style="color:#e8c84a">Add to Home Screen</strong> to install Phoneway
+  <button onclick="this.parentElement.style.display='none'" style="float:right;
+    background:none;border:none;color:#555;font-size:16px;cursor:pointer;
+    margin-top:-2px">×</button>
+</div>
+
 <!-- ── Scripts ────────────────────────────────────────────────── -->
 <!-- ES modules — no bundler required, works directly on Android Chrome 61+ -->
-<script type="module" src="/js/app.js"></script>
+<script type="module" src="js/app.js"></script>
+
+<script>
+// PWA install prompt handling
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const banner = document.getElementById('installBanner');
+  if (banner) banner.style.display = 'flex';
+});
+
+document.getElementById('installBtn')?.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('installBanner').style.display = 'none';
+    if ('vibrate' in navigator) navigator.vibrate([30, 20, 100]);
+  }
+  deferredInstallPrompt = null;
+});
+
+document.getElementById('installDismiss')?.addEventListener('click', () => {
+  document.getElementById('installBanner').style.display = 'none';
+});
+
+// iOS Safari hint (no beforeinstallprompt support)
+const isIos    = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                  || navigator.standalone === true;
+
+if (isIos && isSafari && !isStandalone) {
+  setTimeout(() => {
+    const hint = document.getElementById('iosHint');
+    if (hint) hint.style.display = 'block';
+  }, 3000);
+}
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('installBanner').style.display = 'none';
+  document.getElementById('iosHint').style.display = 'none';
+  if ('vibrate' in navigator) navigator.vibrate([50, 30, 50, 30, 200]);
+});
+</script>
 
 </body>
 </html>
