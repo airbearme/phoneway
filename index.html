@@ -312,8 +312,13 @@
     <div class="step-title modal-title">CALIBRATING…</div>
     <pre class="step-body"></pre>
     <div class="cal-progress-wrap" style="margin-top:16px">
-      <div id="calProgress" style="height:100%;background:linear-gradient(90deg,#7a5000,#e8c84a);transition:width .2s;border-radius:2px"></div>
+      <div id="calStepProgress" style="height:100%;background:linear-gradient(90deg,#7a5000,#e8c84a);transition:width .2s;border-radius:2px;width:0%"></div>
     </div>
+    <div id="calSensorStatus" style="font-size:8px;letter-spacing:2px;color:#555;margin-top:8px;text-align:center"></div>
+    <button id="calSkipBtn" class="modal-btn modal-btn-secondary"
+            style="display:none;margin-top:12px;width:100%;font-size:8px">
+      SKIP THIS STEP →
+    </button>
   </div>
 </div>
 

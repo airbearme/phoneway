@@ -396,22 +396,82 @@ class PhonewayApp {
     this._setCalProgress(0);
     this.baseline.reset();
 
-    // Set up baseline recording
+    // ── Live progress + sensor-status label ───────────────────
+    const stepBody   = document.querySelector('#stepOverlay .step-body');
+    const statusEl   = document.getElementById('calSensorStatus');
+    const skipBtn    = document.getElementById('calSkipBtn');
+    const BASE_TEXT  =
+      `Place phone face-up on a SOFT, FLAT surface:\n\n` +
+      `   ✓ Mouse pad\n   ✓ Notebook / magazine\n   ✓ Folded cloth\n\n` +
+      `Remove ALL objects from the phone.\nDo not touch or move it.`;
+
+    let samplesReceived = 0;
+
     const origOnRaw = this.motion.onRaw;
     this.motion.onRaw = (ax, ay, az) => {
       origOnRaw?.(ax, ay, az);
+      samplesReceived++;
       this.baseline.feed(ax, ay, az);
       this._setCalProgress(this.baseline.progress * 60);
     };
 
-    await new Promise(res => {
-      this.baseline.onComplete = async b => {
-        this.motion.setBaseline(b);
-        res();
-      };
-    });
+    // Update UI every 250 ms while waiting
+    const uiTimer = setInterval(() => {
+      const n = Math.min(samplesReceived, 200);
+      if (stepBody) stepBody.textContent = BASE_TEXT +
+        `\n\n${n > 0 ? `Collecting: ${n} / 200 samples…` : 'Waiting for motion sensor…'}`;
+      if (statusEl) statusEl.textContent =
+        n > 0 ? `SENSOR: ACTIVE  ·  ${n}/200` : 'SENSOR: WAITING…';
+      // Show skip button after 3 s with no data, or 5 s total
+      if (skipBtn && !skipBtn._shown &&
+          (samplesReceived === 0 && Date.now() - _t0 > 3000 ||
+           Date.now() - _t0 > 5000)) {
+        skipBtn.style.display = 'block';
+        skipBtn._shown = true;
+      }
+    }, 250);
+
+    const _t0 = Date.now();
+
+    // Race: baseline complete  vs  skip button  vs  12 s timeout
+    const result = await Promise.race([
+      new Promise(res => {
+        this.baseline.onComplete = b => { this.motion.setBaseline(b); res('done'); };
+      }),
+      new Promise(res => {
+        if (skipBtn) {
+          skipBtn._skipFn = () => res('skip');
+          skipBtn.addEventListener('click', skipBtn._skipFn, { once: true });
+        }
+      }),
+      new Promise(res => setTimeout(() => res('timeout'), 12000)),
+    ]);
+
+    clearInterval(uiTimer);
+    if (skipBtn) {
+      skipBtn.style.display = 'none';
+      skipBtn._shown = false;
+      if (skipBtn._skipFn) skipBtn.removeEventListener('click', skipBtn._skipFn);
+    }
+    if (statusEl) statusEl.textContent = '';
 
     this.motion.onRaw = origOnRaw;
+
+    if (result !== 'done') {
+      // Use whatever raw reading we have, or safe zeros
+      const fallback = samplesReceived > 0
+        ? this.motion.raw
+        : { ax: 0, ay: 0, az: 9.8 };
+      this.motion.setBaseline(fallback);
+      if (result === 'timeout') {
+        this._showToast(
+          samplesReceived === 0
+            ? 'Motion sensor unavailable — using defaults (rough mode)'
+            : 'Baseline short — using partial data',
+          4000
+        );
+      }
+    }
     this._setCalProgress(65);
 
     // Record hammer baseline while we're at it
@@ -885,8 +945,11 @@ class PhonewayApp {
   }
 
   _setCalProgress(pct) {
-    const el = document.getElementById('calProgress');
-    if (el) el.style.width = pct + '%';
+    // Update both IDs — onboard modal + step overlay each have their own bar
+    ['calProgress', 'calStepProgress'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.width = pct + '%';
+    });
   }
 
   async _showStepOverlay(title, body) {
