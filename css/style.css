@@ -664,10 +664,37 @@ html, body {
   background: #0d0d0d;
 }
 
+.footer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .footer-text {
   font-size: 6px;
   letter-spacing: 2px;
   color: #2a2a2a;
+}
+
+.footer-credit {
+  font-size: 6px;
+  letter-spacing: 2px;
+  color: #2f2f2f;
+}
+
+.credit-name {
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 3px rgba(201,162,39,.5));
+  font-weight: 700;
+}
+
+.credit-handle {
+  color: var(--seg-on);
+  text-shadow: 0 0 4px var(--seg-on);
+  font-weight: 700;
 }
 
 .footer-gems {
