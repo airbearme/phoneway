@@ -1,0 +1,41 @@
+{
+  "name": "Phoneway Precision Scale",
+  "short_name": "Phoneway",
+  "description": "High-accuracy digital scale using smartphone sensor fusion & Kalman filtering",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0a",
+  "theme_color": "#c9a227",
+  "categories": ["utilities", "tools"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick Weigh",
+      "url": "/?mode=fusion",
+      "description": "Start weighing immediately"
+    },
+    {
+      "name": "Calibrate",
+      "url": "/?cal=true",
+      "description": "Calibrate with known weight"
+    }
+  ],
+  "screenshots": [],
+  "lang": "en-US",
+  "dir": "ltr"
+}

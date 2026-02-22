@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#111111"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#7a5000"/>
+      <stop offset="35%"  stop-color="#e8c84a"/>
+      <stop offset="50%"  stop-color="#f5d87a"/>
+      <stop offset="65%"  stop-color="#e8c84a"/>
+      <stop offset="100%" stop-color="#7a5400"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Body -->
+  <rect width="512" height="512" rx="60" fill="url(#bg)"/>
+  <rect x="1"   y="1"   width="510" height="510" rx="59" fill="none" stroke="#2a2a2a" stroke-width="2"/>
+
+  <!-- Display window -->
+  <rect x="40" y="60" width="432" height="180" rx="12" fill="#000c00"/>
+  <rect x="40" y="60" width="432" height="180" rx="12" fill="none" stroke="#1a3a1a" stroke-width="2"/>
+
+  <!-- 7-segment digits (000.0 style) -->
+  <g fill="#39ff14" filter="url(#glow)" opacity="0.95">
+    <!-- Digit 1 -->
+    <rect x="70"  y="80"  width="50" height="8" rx="3"/>
+    <rect x="113" y="90"  width="8"  height="52" rx="3"/>
+    <rect x="113" y="150" width="8"  height="52" rx="3"/>
+    <rect x="70"  y="196" width="50" height="8" rx="3"/>
+    <rect x="62"  y="150" width="8"  height="52" rx="3"/>
+    <rect x="62"  y="90"  width="8"  height="52" rx="3"/>
+
+    <!-- Digit 2 -->
+    <rect x="145" y="80"  width="50" height="8" rx="3"/>
+    <rect x="188" y="90"  width="8"  height="52" rx="3"/>
+    <rect x="188" y="150" width="8"  height="52" rx="3"/>
+    <rect x="145" y="196" width="50" height="8" rx="3"/>
+    <rect x="137" y="150" width="8"  height="52" rx="3"/>
+    <rect x="137" y="90"  width="8"  height="52" rx="3"/>
+
+    <!-- Digit 3 -->
+    <rect x="220" y="80"  width="50" height="8" rx="3"/>
+    <rect x="263" y="90"  width="8"  height="52" rx="3"/>
+    <rect x="263" y="150" width="8"  height="52" rx="3"/>
+    <rect x="220" y="196" width="50" height="8" rx="3"/>
+    <rect x="212" y="150" width="8"  height="52" rx="3"/>
+    <rect x="212" y="90"  width="8"  height="52" rx="3"/>
+
+    <!-- Decimal point -->
+    <circle cx="285" cy="200" r="6"/>
+
+    <!-- Digit 4 (tenths) -->
+    <rect x="300" y="80"  width="50" height="8" rx="3"/>
+    <rect x="343" y="90"  width="8"  height="52" rx="3"/>
+    <rect x="343" y="150" width="8"  height="52" rx="3"/>
+    <rect x="300" y="196" width="50" height="8" rx="3"/>
+    <rect x="292" y="150" width="8"  height="52" rx="3"/>
+    <rect x="292" y="90"  width="8"  height="52" rx="3"/>
+
+    <!-- g unit -->
+    <text x="380" y="205" font-family="monospace" font-size="52" font-weight="bold">g</text>
+  </g>
+
+  <!-- Stability bar -->
+  <rect x="40"  y="260" width="432" height="14" rx="4" fill="#0a0a0a"/>
+  <rect x="40"  y="260" width="320" height="14" rx="4" fill="#006600"/>
+  <rect x="40"  y="260" width="160" height="14" rx="4" fill="#39ff14" opacity="0.7"/>
+
+  <!-- Gold border accent -->
+  <rect x="40" y="60"  width="432" height="180" rx="12" fill="none" stroke="url(#gold)" stroke-width="1" opacity="0.4"/>
+
+  <!-- Skull buttons row (simplified) -->
+  <g transform="translate(60, 310)">
+    <!-- Button 1 (gold) -->
+    <rect x="0"   y="0" width="90" height="70" rx="10" fill="url(#gold)"/>
+    <!-- Skull face -->
+    <ellipse cx="45" cy="28" rx="24" ry="22" fill="#1a0d00" opacity="0.7"/>
+    <circle cx="37" cy="26" r="7" fill="#00ffe7" opacity="0.9"/>
+    <circle cx="53" cy="26" r="7" fill="#7b00ff" opacity="0.9"/>
+    <path d="M33 40 Q45 48 57 40" stroke="#1a0d00" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <text x="45" y="62" font-family="sans-serif" font-size="8" fill="#1a0d00" text-anchor="middle" font-weight="bold" letter-spacing="1">TARE</text>
+  </g>
+
+  <g transform="translate(170, 310)">
+    <rect x="0"   y="0" width="90" height="70" rx="10" fill="url(#gold)"/>
+    <ellipse cx="45" cy="28" rx="24" ry="22" fill="#1a0d00" opacity="0.7"/>
+    <circle cx="37" cy="26" r="7" fill="#00ffe7" opacity="0.9"/>
+    <circle cx="53" cy="26" r="7" fill="#7b00ff" opacity="0.9"/>
+    <path d="M33 40 Q45 48 57 40" stroke="#1a0d00" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <text x="45" y="62" font-family="sans-serif" font-size="8" fill="#1a0d00" text-anchor="middle" font-weight="bold" letter-spacing="1">MODE</text>
+  </g>
+
+  <g transform="translate(280, 310)">
+    <rect x="0"   y="0" width="90" height="70" rx="10" fill="url(#gold)"/>
+    <ellipse cx="45" cy="28" rx="24" ry="22" fill="#1a0d00" opacity="0.7"/>
+    <circle cx="37" cy="26" r="7" fill="#00ffe7" opacity="0.9"/>
+    <circle cx="53" cy="26" r="7" fill="#7b00ff" opacity="0.9"/>
+    <path d="M33 40 Q45 48 57 40" stroke="#1a0d00" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <text x="45" y="62" font-family="sans-serif" font-size="8" fill="#1a0d00" text-anchor="middle" font-weight="bold" letter-spacing="1">UNITS</text>
+  </g>
+
+  <!-- Brand name -->
+  <text x="256" y="430" font-family="sans-serif" font-size="36" font-weight="900"
+        fill="url(#gold)" text-anchor="middle" letter-spacing="12" opacity="0.9">PHONEWAY</text>
+
+  <!-- Gold corner gems -->
+  <rect x="22" y="22" width="12" height="12" rx="2" transform="rotate(45 28 28)" fill="url(#gold)" opacity="0.7"/>
+  <rect x="470" y="22" width="12" height="12" rx="2" transform="rotate(45 476 28)" fill="url(#gold)" opacity="0.7"/>
+  <rect x="22" y="470" width="12" height="12" rx="2" transform="rotate(45 28 476)" fill="url(#gold)" opacity="0.7"/>
+  <rect x="470" y="470" width="12" height="12" rx="2" transform="rotate(45 476 476)" fill="url(#gold)" opacity="0.7"/>
+</svg>
