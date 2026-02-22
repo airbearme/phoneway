@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
-  <meta name="mobile-web-app-capable"            content="yes"/>
-  <meta name="apple-mobile-web-app-capable"      content="yes"/>
+  <meta name="mobile-web-app-capable"                content="yes"/>
+  <meta name="apple-mobile-web-app-capable"          content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title"        content="Phoneway"/>
-  <meta name="theme-color"                       content="#c9a227"/>
+  <meta name="apple-mobile-web-app-title"            content="Phoneway"/>
+  <meta name="theme-color"                           content="#c9a227"/>
   <title>Phoneway — Precision Scale</title>
-  <link rel="manifest" href="manifest.json"/>
-  <link rel="apple-touch-icon" href="icons/icon.svg"/>
-  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="manifest"          href="manifest.json"/>
+  <link rel="apple-touch-icon"  href="icons/icon.svg"/>
+  <link rel="stylesheet"        href="css/style.css"/>
 </head>
 <body>
 
 <!-- ═══════════════════════════════════════════════════════════
-     MAIN SCALE BODY
+     SCALE BODY
 ════════════════════════════════════════════════════════════ -->
 <div id="app">
 
@@ -24,132 +24,108 @@
   <div id="header">
     <div class="brand">
       <div class="brand-name">PHONEWAY</div>
-      <div class="brand-sub">Precision Digital Scale</div>
+      <div class="brand-sub">PRECISION DIGITAL SCALE · SENSOR FUSION</div>
     </div>
-
     <div class="header-leds">
-      <div class="led-group">
-        <span style="font-size:6px;letter-spacing:2px;color:#333">PWR</span>
-        <div class="led led-off" id="ledPower"></div>
-      </div>
-      <div class="led-group">
-        <span style="font-size:6px;letter-spacing:2px;color:#333">STB</span>
-        <div class="led led-off" id="ledStable"></div>
-      </div>
-      <div class="led-group">
-        <span style="font-size:6px;letter-spacing:2px;color:#333">MIC</span>
-        <div class="led led-off" id="ledAudio"></div>
-      </div>
+      <div class="led-group"><span class="led-lbl">PWR</span><div class="led led-off" id="ledPower"></div></div>
+      <div class="led-group"><span class="led-lbl">STB</span><div class="led led-off" id="ledStable"></div></div>
+      <div class="led-group"><span class="led-lbl">MIC</span><div class="led led-off" id="ledAudio"></div></div>
     </div>
   </div>
 
-  <!-- ── Display Section ────────────────────────────────────── -->
+  <!-- ── Display ────────────────────────────────────────────── -->
   <div id="display-section">
-
     <div class="display-window">
-      <!-- 7-Segment digits built by display.js -->
       <div id="digitDisplay" class="seg-display"></div>
-      <!-- Unit label -->
       <div class="display-unit" id="unitLabel">g</div>
     </div>
 
-    <!-- Stability / signal bar -->
+    <!-- Stability bar -->
     <div id="stabilityBar">
       <div class="stability-track">
         <div class="stability-fill" id="stabilityFill"></div>
       </div>
       <div class="stability-label" id="stableLabel">READY</div>
     </div>
-
   </div>
 
-  <!-- ── Status Line ─────────────────────────────────────────── -->
+  <!-- ── Status Bar ─────────────────────────────────────────── -->
   <div id="status-bar">
     <span id="statusText">IDLE</span>
     <span id="modeLabel">FUSION</span>
     <span id="confLabel">CONF: 0%</span>
   </div>
 
-  <!-- ── Touch Weigh Pad ─────────────────────────────────────── -->
+  <!-- ── Surface / Touch Pad ────────────────────────────────── -->
   <div id="touch-section">
     <div id="touchPad">
       <div class="pad-icon">⚖️</div>
-      <div class="pad-label">PLACE OBJECT ON PHONE · TOUCH PAD ACTIVE</div>
+      <div class="pad-label">PLACE OBJECT ON PHONE · ALL SENSORS ACTIVE</div>
 
-      <!-- Sensor activity bars -->
+      <!-- 4 sensor activity bars -->
       <div class="sensor-bars">
         <div class="sensor-row">
-          <span>ACCEL</span>
-          <div class="sensor-track">
-            <div class="sensor-fill" id="accelBar"></div>
-          </div>
+          <span class="s-lbl">ACCEL</span>
+          <div class="sensor-track"><div class="sensor-fill" id="accelBar"></div></div>
         </div>
         <div class="sensor-row">
-          <span>AUDIO</span>
-          <div class="sensor-track">
-            <div class="sensor-fill" id="audioBar"></div>
-          </div>
+          <span class="s-lbl">AUDIO</span>
+          <div class="sensor-track"><div class="sensor-fill" id="audioBar"></div></div>
         </div>
         <div class="sensor-row">
-          <span>TOUCH</span>
-          <div class="sensor-track">
-            <div class="sensor-fill" id="touchBar"></div>
-          </div>
+          <span class="s-lbl">TOUCH</span>
+          <div class="sensor-track"><div class="sensor-fill" id="touchBar"></div></div>
+        </div>
+        <div class="sensor-row">
+          <span class="s-lbl">HAMR</span>
+          <div class="sensor-track"><div class="sensor-fill" id="hammerBar"></div></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ── Button Panel ────────────────────────────────────────── -->
+  <!-- ── Button Panel ───────────────────────────────────────── -->
   <div id="btn-panel">
 
-    <!-- Row 1 -->
+    <!-- Row 1: main functions -->
     <div class="btn-row">
-      <!-- TARE -->
-      <button class="btn" id="btnTare" aria-label="Tare / Zero">
-        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity="0.75"/>
+      <button class="btn" id="btnTare" aria-label="Tare">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
           <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
           <circle class="eye-right" cx="38" cy="24" r="6.5"/>
-          <!-- Nose -->
-          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity="0.6"/>
-          <!-- Teeth -->
-          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <!-- Cracks -->
-          <path d="M18 18 L14 12" stroke="#1a0a00" stroke-width="1.5" opacity="0.4"/>
-          <path d="M42 15 L46 10" stroke="#1a0a00" stroke-width="1.5" opacity="0.4"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <path d="M18 18 L14 12 M42 15 L46 10" stroke="#1a0a00" stroke-width="1.5" opacity=".4"/>
         </svg>
         <div class="btn-label">TARE</div>
       </button>
 
-      <!-- MODE -->
-      <button class="btn" id="btnMode" aria-label="Cycle sensor mode">
-        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity="0.75"/>
+      <button class="btn" id="btnMode" aria-label="Mode">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
           <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
           <circle class="eye-right" cx="38" cy="24" r="6.5"/>
-          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity="0.6"/>
-          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <path d="M16 22 L12 14 M44 16 L49 10" stroke="#1a0a00" stroke-width="1.5" opacity="0.4"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <path d="M16 22 L12 14 M44 16 L49 10" stroke="#1a0a00" stroke-width="1.5" opacity=".4"/>
         </svg>
         <div class="btn-label">MODE</div>
       </button>
 
-      <!-- UNITS -->
-      <button class="btn" id="btnUnits" aria-label="Cycle weight units">
-        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity="0.75"/>
+      <button class="btn" id="btnUnits" aria-label="Units">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
           <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
           <circle class="eye-right" cx="38" cy="24" r="6.5"/>
-          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity="0.6"/>
-          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <path d="M14 20 L10 13" stroke="#1a0a00" stroke-width="1.5" opacity="0.4"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
         </svg>
         <div class="btn-label">UNITS</div>
       </button>
@@ -157,72 +133,79 @@
 
     <!-- Row 2 -->
     <div class="btn-row-2">
-
-      <!-- POWER (red) -->
-      <button class="btn" id="btnPower" aria-label="Power on/off">
-        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0000" opacity="0.75"/>
-          <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
-          <circle class="eye-right" cx="38" cy="24" r="6.5"/>
-          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0000" opacity="0.6"/>
-          <rect x="22" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity="0.7"/>
-          <rect x="28" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity="0.7"/>
-          <rect x="34" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity="0.7"/>
-          <!-- Lightning bolt -->
-          <path d="M32 6 L26 18 L30 18 L28 28 L34 16 L30 16 Z" fill="#ff4444" opacity="0.6"/>
+      <!-- POWER (red skull) -->
+      <button class="btn" id="btnPower" aria-label="Power">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0000" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#ff4444"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#ff4444"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0000" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#ff4444" opacity=".7"/>
+          <path d="M32 6 L26 18 L30 18 L28 28 L34 16 L30 16 Z" fill="#ff4444" opacity=".6"/>
         </svg>
         <div class="btn-label">ON/OFF</div>
       </button>
 
       <!-- HOLD -->
-      <button class="btn" id="btnHold" aria-label="Hold reading">
-        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity="0.75"/>
+      <button class="btn" id="btnHold" aria-label="Hold">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#1a0a00" opacity=".75"/>
           <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
           <circle class="eye-right" cx="38" cy="24" r="6.5"/>
-          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity="0.6"/>
-          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity="0.7"/>
-          <!-- Pause bars -->
-          <rect x="24" y="8"  width="5" height="14" rx="2" fill="#c9a227" opacity="0.5"/>
-          <rect x="31" y="8"  width="5" height="14" rx="2" fill="#c9a227" opacity="0.5"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#1a0a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#c9a227" opacity=".7"/>
+          <rect x="24" y="8" width="5" height="14" rx="2" fill="#c9a227" opacity=".5"/>
+          <rect x="31" y="8" width="5" height="14" rx="2" fill="#c9a227" opacity=".5"/>
         </svg>
         <div class="btn-label">HOLD</div>
       </button>
 
-      <!-- CAL (blue-ish) -->
-      <button class="btn" id="btnCal" aria-label="Calibrate scale">
-        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#00060a" opacity="0.75"/>
-          <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
-          <circle class="eye-right" cx="38" cy="24" r="6.5"/>
-          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#00060a" opacity="0.6"/>
-          <rect x="22" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity="0.7"/>
-          <rect x="28" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity="0.7"/>
-          <rect x="34" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity="0.7"/>
-          <!-- Star / calibration icon -->
-          <path d="M30 6 L32 13 L39 11 L35 17 L42 20 L35 23 L39 30 L32 27 L30 34 L28 27 L21 30 L25 23 L18 20 L25 17 L21 11 L28 13 Z"
-                fill="#44aaff" opacity="0.4"/>
+      <!-- CAL (blue skull) -->
+      <button class="btn" id="btnCal" aria-label="Calibrate">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#00060a" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#44aaff"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#44aaff"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#00060a" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#44aaff" opacity=".7"/>
+          <path d="M30 6 L32 13 L39 11 L35 17 L42 20 L35 23 L39 30 L32 27 L30 34 L28 27 L21 30 L25 23 L18 20 L25 17 L21 11 L28 13 Z" fill="#44aaff" opacity=".35"/>
         </svg>
         <div class="btn-label">CAL</div>
       </button>
-
-      <!-- BACKLIGHT (blue) -->
-      <!-- Reserve space with hidden 4th or use btn-light separately -->
     </div>
 
-    <!-- Bottom single row (light button) -->
-    <div style="display:flex;justify-content:flex-end;margin-top:6px;padding-right:2px">
-      <button class="btn" id="btnLight" style="width:80px;padding:5px 4px 4px" aria-label="Toggle backlight">
-        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:20px;height:20px">
-          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#000616" opacity="0.75"/>
-          <circle class="eye-left"  cx="22" cy="24" r="6.5"/>
-          <circle class="eye-right" cx="38" cy="24" r="6.5"/>
-          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#000616" opacity="0.6"/>
-          <!-- Rays -->
+    <!-- Bottom row -->
+    <div class="btn-row-3">
+      <!-- HAMMER — vibration exciter -->
+      <button class="btn btn-hammer" id="btnHammer" aria-label="Vibration hammer measure">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#0a0600" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#ff8c00"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#ff8c00"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#0a0600" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#ff8c00" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#ff8c00" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#ff8c00" opacity=".7"/>
+          <!-- Vibration waves -->
+          <path d="M8 26 Q4 22 8 18 Q12 14 8 10" stroke="#ff8c00" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+          <path d="M52 26 Q56 22 52 18 Q48 14 52 10" stroke="#ff8c00" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+        </svg>
+        <div class="btn-label">HAMMER</div>
+      </button>
+
+      <button class="btn btn-sm-light" id="btnLight" aria-label="Backlight">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#000616" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#44aaff"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#44aaff"/>
           <path d="M30 4 L30 10 M46 12 L42 16 M52 28 L46 28 M46 44 L42 40 M30 52 L30 46 M14 44 L18 40 M8 28 L14 28 M14 12 L18 16"
-                stroke="#44aaff" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+                stroke="#44aaff" stroke-width="2" stroke-linecap="round" opacity=".6"/>
         </svg>
         <div class="btn-label">LIGHT</div>
       </button>
@@ -232,7 +215,7 @@
 
   <!-- ── Footer ─────────────────────────────────────────────── -->
   <div id="footer">
-    <div class="footer-text">PHONEWAY v1.0 · SENSOR FUSION</div>
+    <div class="footer-text">PHONEWAY v2 · 6-SENSOR FUSION · ADAPTIVE KALMAN</div>
     <div class="footer-gems">
       <div class="gem gem-gold"></div>
       <div class="gem gem-ruby"></div>
@@ -249,55 +232,72 @@
 ════════════════════════════════════════════════════════════ -->
 <div class="overlay" id="onboardModal">
   <div class="modal-card">
-    <div class="modal-title">WELCOME TO PHONEWAY</div>
-    <div class="modal-sub">PRECISION SENSOR FUSION SCALE · ONE-TIME SETUP</div>
+    <div class="modal-title">CALIBRATE PHONEWAY</div>
+    <div class="modal-sub">ONE-TIME SETUP · KEEP A COIN HANDY</div>
 
-    <p style="font-size:9px;line-height:1.8;color:#888;letter-spacing:1px;margin-bottom:14px">
-      Phoneway uses your phone's motion sensors, microphone, and touchscreen
-      together with Kalman filtering for maximum accuracy.
-      <br><br>
-      To calibrate, select a known weight you have nearby:
-    </p>
+    <div class="cal-tip-box">
+      <p class="tip-headline">🎯 For 0.1 g accuracy — grab one of these:</p>
+      <div class="tip-coins">
+        <div class="tip-coin">💵<br><strong>1.0 g</strong><br><small>Dollar bill</small></div>
+        <div class="tip-coin">🪙<br><strong>2.5 g</strong><br><small>Penny</small></div>
+        <div class="tip-coin">🪙<br><strong>5.0 g</strong><br><small>Nickel ★</small></div>
+        <div class="tip-coin">🪙<br><strong>5.67 g</strong><br><small>Quarter</small></div>
+      </div>
+      <p class="tip-note">
+        ⚡ Best accuracy: use a <strong>nickel (5g)</strong> + a <strong>dollar bill (1g)</strong>
+        for a 2-point calibration. Then keep them as your reference weights.
+      </p>
+    </div>
 
+    <p class="modal-instr">Select your primary calibration weight:</p>
     <div class="cal-weight-list"></div>
 
     <div class="custom-weight-row">
       <label for="customWeightInput">GRAMS:</label>
-      <input type="number" id="customWeightInput" min="0.1" max="500" step="0.1"
-             placeholder="0.0" inputmode="decimal"/>
+      <input type="number" id="customWeightInput" min="0.1" max="500" step="0.01"
+             placeholder="0.00" inputmode="decimal"/>
     </div>
 
-    <div style="font-size:8px;color:#555;letter-spacing:1px;margin-bottom:14px;line-height:1.8;padding:8px;background:#111;border-radius:6px;border:1px solid #222">
-      <strong style="color:#c9a227">⚡ TIP:</strong> Place phone on a <strong style="color:#aaa">soft, flat surface</strong>
-      (notebook, mouse pad, folded cloth) for best accuracy.
-      The slight flex of the surface is what the sensor detects.
+    <div class="surface-tip">
+      <strong>📱 Surface tip:</strong> Place phone on a mouse-pad, notebook, or folded
+      cloth — never on a hard table. The soft surface is what the sensor detects deflecting.
     </div>
 
-    <div class="cal-progress-wrap">
-      <div id="calProgress"></div>
-    </div>
+    <div class="cal-progress-wrap"><div id="calProgress"></div></div>
 
     <div class="modal-btns">
-      <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ CALIBRATE NOW</button>
-      <button class="modal-btn modal-btn-secondary" id="skipCalBtn">SKIP (LESS ACCURATE)</button>
+      <button class="modal-btn modal-btn-primary" id="startCalBtn">⚖️ START CALIBRATION</button>
+      <button class="modal-btn modal-btn-secondary" id="skipCalBtn">SKIP (ROUGH MODE)</button>
     </div>
   </div>
 </div>
 
 
 <!-- ═══════════════════════════════════════════════════════════
-     RE-CALIBRATION OVERLAY
+     STEP-BY-STEP CALIBRATION OVERLAY
 ════════════════════════════════════════════════════════════ -->
-<div class="overlay" id="calOverlay">
+<div class="overlay" id="stepOverlay" style="display:none">
+  <div class="modal-card step-card">
+    <div class="step-title modal-title">CALIBRATING…</div>
+    <pre class="step-body"></pre>
+    <div class="cal-progress-wrap" style="margin-top:16px">
+      <div id="calProgress" style="height:100%;background:linear-gradient(90deg,#7a5000,#e8c84a);transition:width .2s;border-radius:2px"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     RE-CALIBRATE OVERLAY
+════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="calOverlay" style="display:none">
   <div class="modal-card">
     <div class="modal-title">RECALIBRATE</div>
-    <div class="modal-sub">THIS WILL OVERWRITE CURRENT CALIBRATION</div>
-
+    <div class="modal-sub">HAVE A NICKEL OR DOLLAR BILL READY</div>
     <p style="font-size:9px;line-height:1.8;color:#888;letter-spacing:1px;margin-bottom:16px">
-      Have a known weight ready (coin, dollar bill, etc.).<br>
-      You will be guided step by step.
+      Two-point calibration using everyday objects gives you ±0.1–0.5 g accuracy.
+      A nickel (5.0 g) + dollar bill (1.0 g) is the recommended combination.
     </p>
-
     <div class="modal-btns">
       <button class="modal-btn modal-btn-primary" id="calConfirmBtn">PROCEED</button>
       <button class="modal-btn modal-btn-secondary" id="calCancelBtn">CANCEL</button>
@@ -306,96 +306,78 @@
 </div>
 
 
-<!-- ═══════════════════════════════════════════════════════════
-     MESSAGE OVERLAY  (temporary instruction display)
-════════════════════════════════════════════════════════════ -->
-<div class="overlay" id="messageOverlay"></div>
+<!-- ── PWA Install Banner (Android Chrome) ───────────────── -->
+<div id="installBanner">
+  <div class="install-text">
+    <div class="install-title">INSTALL PHONEWAY</div>
+    <div class="install-sub">Add to home screen — works offline, no app store</div>
+  </div>
+  <button id="installBtn" class="install-button">INSTALL</button>
+  <button id="installDismiss" class="install-x">×</button>
+</div>
 
+<!-- ── iOS Safari Install Hint ───────────────────────────── -->
+<div id="iosHint">
+  Tap <strong>Share ⬆</strong> then <strong>Add to Home Screen</strong> to install
+  <button onclick="this.parentElement.style.display='none'" class="ios-close">×</button>
+</div>
 
-<!-- ── Toast notification ─────────────────────────────────────── -->
+<!-- ── Toast ─────────────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
 
 
-<!-- ── PWA Install Banner ────────────────────────────────────── -->
-<div id="installBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;
-  background:linear-gradient(135deg,#1a1000,#2a1800);
-  border-top:1px solid #c9a227;padding:12px 16px;z-index:500;
-  display:none;align-items:center;gap:12px;max-width:430px;margin:0 auto">
-  <div style="flex:1">
-    <div style="font-family:'Orbitron',monospace;font-size:9px;font-weight:700;
-      letter-spacing:2px;color:#e8c84a;margin-bottom:2px">INSTALL PHONEWAY</div>
-    <div style="font-family:monospace;font-size:8px;color:#777;letter-spacing:1px">
-      Add to home screen for full scale experience
-    </div>
-  </div>
-  <button id="installBtn" style="background:linear-gradient(135deg,#7a5000,#e8c84a,#f5d87a,#e8c84a,#7a5400);
-    border:none;border-radius:8px;padding:8px 14px;font-family:'Orbitron',monospace;
-    font-size:8px;font-weight:700;letter-spacing:2px;color:#1a0d00;cursor:pointer;
-    box-shadow:0 2px 8px rgba(201,162,39,.7)">INSTALL</button>
-  <button id="installDismiss" style="background:transparent;border:none;color:#444;
-    font-size:18px;cursor:pointer;padding:0 4px">×</button>
-</div>
-
-<!-- ── iOS Install Hint (Safari only) ──────────────────────── -->
-<div id="iosHint" style="display:none;position:fixed;bottom:0;left:0;right:0;
-  background:#1a1000;border-top:1px solid #c9a227;padding:12px 16px;z-index:500;
-  font-family:monospace;font-size:8px;color:#888;letter-spacing:1px;
-  text-align:center;max-width:430px;margin:0 auto">
-  Tap <strong style="color:#e8c84a">Share ⬆</strong> then
-  <strong style="color:#e8c84a">Add to Home Screen</strong> to install Phoneway
-  <button onclick="this.parentElement.style.display='none'" style="float:right;
-    background:none;border:none;color:#555;font-size:16px;cursor:pointer;
-    margin-top:-2px">×</button>
-</div>
-
-<!-- ── Scripts ────────────────────────────────────────────────── -->
-<!-- ES modules — no bundler required, works directly on Android Chrome 61+ -->
+<!-- ── Scripts ───────────────────────────────────────────── -->
 <script type="module" src="js/app.js"></script>
 
 <script>
-// PWA install prompt handling
-let deferredInstallPrompt = null;
+/* PWA install prompt — Android Chrome auto-shows after 2s */
+let _dip = null;
 
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
-  deferredInstallPrompt = e;
-  const banner = document.getElementById('installBanner');
-  if (banner) banner.style.display = 'flex';
+  _dip = e;
+  const b = document.getElementById('installBanner');
+  if (b) b.classList.add('show');
+
+  // Auto-trigger native dialog after 2 seconds on first visit
+  const shown = sessionStorage.getItem('installPromptShown');
+  if (!shown) {
+    sessionStorage.setItem('installPromptShown', '1');
+    setTimeout(() => { if (_dip) { _dip.prompt(); } }, 2000);
+  }
 });
 
 document.getElementById('installBtn')?.addEventListener('click', async () => {
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  const { outcome } = await deferredInstallPrompt.userChoice;
+  if (!_dip) return;
+  _dip.prompt();
+  const { outcome } = await _dip.userChoice;
   if (outcome === 'accepted') {
-    document.getElementById('installBanner').style.display = 'none';
+    document.getElementById('installBanner').classList.remove('show');
     if ('vibrate' in navigator) navigator.vibrate([30, 20, 100]);
   }
-  deferredInstallPrompt = null;
+  _dip = null;
 });
 
 document.getElementById('installDismiss')?.addEventListener('click', () => {
-  document.getElementById('installBanner').style.display = 'none';
+  document.getElementById('installBanner').classList.remove('show');
 });
-
-// iOS Safari hint (no beforeinstallprompt support)
-const isIos    = /iphone|ipad|ipod/i.test(navigator.userAgent);
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-                  || navigator.standalone === true;
-
-if (isIos && isSafari && !isStandalone) {
-  setTimeout(() => {
-    const hint = document.getElementById('iosHint');
-    if (hint) hint.style.display = 'block';
-  }, 3000);
-}
 
 window.addEventListener('appinstalled', () => {
-  document.getElementById('installBanner').style.display = 'none';
-  document.getElementById('iosHint').style.display = 'none';
+  document.getElementById('installBanner')?.classList.remove('show');
+  document.getElementById('iosHint')?.remove();
   if ('vibrate' in navigator) navigator.vibrate([50, 30, 50, 30, 200]);
 });
+
+// iOS Safari
+const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+if (isIos && isSafari && !isStandalone) {
+  setTimeout(() => {
+    const h = document.getElementById('iosHint');
+    if (h) h.classList.add('show');
+  }, 3500);
+}
 </script>
 
 </body>

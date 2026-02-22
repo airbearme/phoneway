@@ -779,6 +779,174 @@ html, body {
   flex: 1;
 }
 
+/* ── Hammer button (orange skull) ──────────────────────────── */
+.btn-hammer {
+  background: linear-gradient(135deg, #4a2800 0%, #c06000 40%, #ff8c00 50%, #c06000 60%, #4a2800 100%);
+  box-shadow: 0 2px 8px rgba(200,100,0,.7), 0 0 20px rgba(200,100,0,.3), inset 0 1px 1px rgba(255,255,255,.2);
+}
+.btn-hammer .btn-label { color: #fff; }
+
+.btn-sm-light {
+  background: linear-gradient(135deg, #003366 0%, #0055aa 40%, #44aaff 50%, #0055aa 60%, #002244 100%);
+  box-shadow: 0 2px 8px rgba(0,100,200,.7), inset 0 1px 1px rgba(255,255,255,.2);
+}
+.btn-sm-light .btn-label { color: #adf; }
+
+.btn-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ── LED label ──────────────────────────────────────────────── */
+.led-lbl { font-size: 6px; letter-spacing: 2px; color: #333; }
+.s-lbl   { font-size: 7px; letter-spacing: 1px; color: #444; min-width: 36px; }
+
+/* ── Calibration tip box ────────────────────────────────────── */
+.cal-tip-box {
+  background: #0f0f00;
+  border: 1px solid var(--gold-dark);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.tip-headline {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--gold-light);
+  margin-bottom: 10px;
+}
+.tip-coins {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 10px;
+}
+.tip-coin {
+  text-align: center;
+  font-size: 22px;
+  line-height: 1.4;
+  color: #aaa;
+}
+.tip-coin strong { display: block; font-size: 10px; color: var(--gold-light); }
+.tip-coin small  { font-size: 7px; color: #666; }
+.tip-note {
+  font-size: 8px;
+  color: #888;
+  letter-spacing: 0.5px;
+  line-height: 1.7;
+}
+.tip-note strong { color: var(--gold-light); }
+
+.modal-instr {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.surface-tip {
+  font-size: 8px;
+  line-height: 1.7;
+  color: #666;
+  letter-spacing: 0.5px;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 10px 0;
+}
+
+/* ── Step calibration card ──────────────────────────────────── */
+.step-card { text-align: left; }
+.step-body {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--seg-on);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  text-shadow: 0 0 8px var(--seg-on);
+  margin-top: 12px;
+}
+
+/* ── Install Banner ──────────────────────────────────────────── */
+#installBanner {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, #1a1000, #2a1800);
+  border-top: 1px solid var(--gold);
+  padding: 12px 16px;
+  z-index: 500;
+  align-items: center;
+  gap: 12px;
+  max-width: 430px;
+  margin: 0 auto;
+  box-shadow: 0 -4px 20px rgba(0,0,0,.8);
+}
+#installBanner.show { display: flex; }
+
+.install-text  { flex: 1; }
+.install-title { font-size: 9px; font-weight: 700; letter-spacing: 2px; color: var(--gold-light); margin-bottom: 2px; }
+.install-sub   { font-size: 7px; color: #666; letter-spacing: 1px; }
+
+.install-button {
+  background: var(--gold-grad);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-family: var(--font-ui);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #1a0d00;
+  cursor: pointer;
+  box-shadow: var(--shadow-gold);
+  flex-shrink: 0;
+}
+
+.install-x {
+  background: transparent;
+  border: none;
+  color: #444;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ── iOS hint ────────────────────────────────────────────────── */
+#iosHint {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #1a1000;
+  border-top: 1px solid var(--gold-dark);
+  padding: 10px 16px;
+  z-index: 500;
+  font-size: 8px;
+  color: #888;
+  letter-spacing: 1px;
+  text-align: center;
+  max-width: 430px;
+  margin: 0 auto;
+}
+#iosHint.show { display: block; }
+#iosHint strong { color: var(--gold-light); }
+.ios-close {
+  float: right;
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 16px;
+  cursor: pointer;
+  margin-top: -2px;
+}
+
 /* ── Dim mode (backlight toggle) ────────────────────────────── */
 .dim-mode .display-window { filter: brightness(0.4); }
 .dim-mode #btn-panel      { filter: brightness(0.55); }

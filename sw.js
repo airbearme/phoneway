@@ -1,11 +1,12 @@
 /**
- * sw.js — Service Worker for Phoneway Precision Scale
- * Provides full offline capability.
+ * sw.js — Service Worker for Phoneway Precision Scale v2
+ * Full offline capability via cache-first strategy.
  */
 
-const CACHE  = 'phoneway-v1.0';
-// Use relative paths so the SW works both on root and on a sub-path (GitHub Pages)
-const BASE = self.registration.scope;
+const CACHE = 'phoneway-v2.0';
+// Dynamic scope works on both root (localhost) and sub-path (GitHub Pages)
+const BASE  = self.registration.scope;
+
 const ASSETS = [
   BASE,
   BASE + 'index.html',
@@ -15,14 +16,14 @@ const ASSETS = [
   BASE + 'js/sensors.js',
   BASE + 'js/audio.js',
   BASE + 'js/display.js',
+  BASE + 'js/vibrationHammer.js',
+  BASE + 'js/genericSensors.js',
   BASE + 'js/app.js',
   BASE + 'icons/icon.svg',
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS))
-  );
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
@@ -36,18 +37,17 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Cache-first for static assets
   if (e.request.method !== 'GET') return;
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(res => {
-        if (res.ok) {
+        if (res && res.ok) {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return res;
-      });
+      }).catch(() => cached);
     })
   );
 });

@@ -1,95 +1,88 @@
 /**
- * sensors.js — Sensor management & fusion for Phoneway Precision Scale
+ * sensors.js — Motion sensor management & Bayesian fusion for Phoneway
  *
- * Handles:
- *   • DeviceMotionEvent  (accelerometer + gyroscope)
- *   • DeviceOrientationEvent (tilt angles)
- *   • Touch force / contact area
- *   • Magnetometer (via Sensor API where available)
- *   • Sensor fusion: weighted combination of all available estimates
+ * Weight estimation physics:
+ * ──────────────────────────
+ * Phone on compliant surface (mouse-pad, notepad) = spring-mass system.
+ * Added mass → surface compresses → phone tilts slightly.
  *
- * Weight estimation physics
- * ─────────────────────────
- * When a phone sits face-up on a compliant surface (mouse-pad, notepad…),
- * adding mass m causes the surface to compress and the phone to tilt.
+ *   tilt  Δθ  = m·g / (k · d)        (spring model)
+ *   ΔAhoriz   = g · sin(Δθ) ≈ g · Δθ  (small angles)
  *
- *   tilt change  Δθ  =  m·g / (k · d)     (spring model, k=surface stiffness)
- *   horizontal accel change  ΔA  =  g · sin(Δθ) ≈ g · Δθ  (small angles)
- *
- * After a two-point calibration (zero + known weight W_cal):
- *
+ * With 2-point calibration:
  *   sensitivity  = W_cal / ΔA_cal   [g / (m·s⁻²)]
  *   weight       = ΔA · sensitivity
  *
- * Where  ΔA = √(Δax² + Δay²)  — the horizontal vector magnitude change.
+ * Sensor pipeline:
+ *   raw accel → Adaptive Kalman → baseline subtract →
+ *   Median → Moving Average → Particle Filter → weight estimate
  */
 
 'use strict';
 
-import { KalmanFilter2D, MovingAverageFilter, MedianFilter, ExpSmooth }
-  from './kalman.js';
+import {
+  AdaptiveKalmanFilter, KalmanFilter2D, ParticleFilter,
+  MovingAverageFilter, MedianFilter, ExpSmooth
+} from './kalman.js';
 
 /* ═══════════════════════════════════════════════════════════════
-   BaselineRecorder  —  captures quiet-phone baseline
+   BaselineRecorder  —  captures quiet-phone average
 ═══════════════════════════════════════════════════════════════ */
 class BaselineRecorder {
-  constructor(samples = 120) {        // ~2s at 60Hz
+  constructor(samples = 180) {
     this.required = samples;
-    this.bufX = [];
-    this.bufY = [];
-    this.bufZ = [];
-    this.done = false;
-    this.onComplete = null;           // called with { ax, ay, az }
+    this._bufX = []; this._bufY = []; this._bufZ = [];
+    this.done  = false;
+    this.onComplete = null;
   }
 
   feed(ax, ay, az) {
     if (this.done) return;
-    this.bufX.push(ax);
-    this.bufY.push(ay);
-    this.bufZ.push(az);
-    if (this.bufX.length >= this.required) {
+    this._bufX.push(ax);
+    this._bufY.push(ay);
+    this._bufZ.push(az);
+    if (this._bufX.length >= this.required) {
       this.done = true;
-      const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
-      this.onComplete?.({ ax: avg(this.bufX), ay: avg(this.bufY), az: avg(this.bufZ) });
+      const avg = a => a.reduce((s, v) => s + v, 0) / a.length;
+      this.onComplete?.({ ax: avg(this._bufX), ay: avg(this._bufY), az: avg(this._bufZ) });
     }
   }
 
-  get progress() {
-    return Math.min(this.bufX.length / this.required, 1);
-  }
-
-  reset() {
-    this.bufX = []; this.bufY = []; this.bufZ = [];
-    this.done = false;
-  }
+  get progress() { return Math.min(this._bufX.length / this.required, 1); }
+  reset() { this._bufX = []; this._bufY = []; this._bufZ = []; this.done = false; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MotionSensor  —  wraps DeviceMotionEvent
+   MotionSensor  —  wraps DeviceMotionEvent (universal fallback)
+   Uses Generic Sensor API values if fed externally by app.js
 ═══════════════════════════════════════════════════════════════ */
 class MotionSensor {
   constructor() {
-    this.kalman   = new KalmanFilter2D({ R: 0.8, Q: 0.02 });
-    this.mavg     = new MovingAverageFilter(40);
-    this.median   = new MedianFilter(9);
-    this.smooth   = new ExpSmooth(0.12);
+    // Filtering pipeline  (order matters!)
+    this.kalman  = new KalmanFilter2D({ R: 0.6, Q: 0.015 });
+    this.median  = new MedianFilter(11);
+    this.mavg    = new MovingAverageFilter(50);
+    this.particle = new ParticleFilter({ N: 300, sigmaProcess: 0.08, sigmaMeasure: 0.4 });
 
-    this.baseline = null;             // { ax, ay, az }
-    this.sensitivity = null;          // g/( m·s⁻² )  — set by calibration
-    this.active   = false;
+    this.baseline    = null;
+    this.sensitivity = null;   // g/(m·s⁻²) — from calibration
+    this.calPoints   = [];     // [{deltaA, grams}] for least-squares
+
+    this.active  = false;
     this._handler = null;
+    this._interval = 16;       // ms, updated from event
 
     this.raw      = { ax: 0, ay: 0, az: 0 };
     this.filtered = { ax: 0, ay: 0 };
     this.weightG  = 0;
-    this.confidence = 0;              // 0–1
+    this.confidence = 0;
+    this.surfaceQuality = 'unknown';  // 'poor'|'ok'|'good'|'excellent'
 
-    this.onWeight = null;             // callback(grams, confidence)
-    this.onRaw    = null;             // callback(ax, ay, az)
+    this.onWeight = null;
+    this.onRaw    = null;
   }
 
   async request() {
-    // iOS 13+ requires explicit permission
     if (typeof DeviceMotionEvent?.requestPermission === 'function') {
       const perm = await DeviceMotionEvent.requestPermission();
       if (perm !== 'granted') throw new Error('Motion permission denied');
@@ -98,7 +91,21 @@ class MotionSensor {
 
   start() {
     if (this.active) return;
-    this._handler = (e) => this._onMotion(e);
+    let lastTs = null;
+    this._handler = (e) => {
+      // Track sample rate from event intervals
+      if (e.interval) this._interval = e.interval;
+
+      const src = e.accelerationIncludingGravity || e.acceleration || {};
+      let ax = src.x ?? 0, ay = src.y ?? 0, az = src.z ?? 0;
+
+      // Normalise: ensure z > 0 when face-up (Android) vs < 0 (iOS)
+      if (az < 0) { ax = -ax; ay = -ay; az = -az; }
+
+      this.raw = { ax, ay, az };
+      this.onRaw?.(ax, ay, az);
+      this._process(ax, ay, az);
+    };
     window.addEventListener('devicemotion', this._handler, { passive: true });
     this.active = true;
   }
@@ -109,66 +116,81 @@ class MotionSensor {
     this.active = false;
   }
 
-  _onMotion(e) {
-    // Use accelerationIncludingGravity (always available) as fallback
-    const src = e.accelerationIncludingGravity || e.acceleration;
-    if (!src) return;
+  /**
+   * Allow external override from Generic Sensor API (higher quality).
+   * app.js calls this when LinearAccelerationSensor fires.
+   */
+  injectLinearAccel(lax, lay, laz) {
+    // Linear accel = hardware-gravity-removed: no baseline needed for gravity
+    // Use directly as the signal (no need to subtract baseline gravity)
+    const dA = Math.sqrt(lax * lax + lay * lay);
+    this._applyDeltaA(dA);
+  }
 
-    let ax = src.x ?? 0;
-    let ay = src.y ?? 0;
-    let az = src.z ?? 0;
-
-    // Normalise sign conventions across platforms
-    // Android: z ≈ +9.81 face-up   iOS: z ≈ -9.81 face-up
-    if (az < 0) { ax = -ax; ay = -ay; az = -az; }
-
-    this.raw = { ax, ay, az };
-    this.onRaw?.(ax, ay, az);
-
-    // Kalman filter the horizontal components
+  _process(ax, ay, az) {
     const f = this.kalman.update(ax, ay);
     this.filtered = f;
-
     if (!this.baseline) return;
 
-    // Horizontal deviation from baseline
     const dax = f.x - this.baseline.ax;
     const day = f.y - this.baseline.ay;
-    const dA  = Math.sqrt(dax * dax + day * day);  // m·s⁻²
+    const dA  = Math.sqrt(dax * dax + day * day);
+    this._applyDeltaA(dA);
+  }
 
-    // Stabilize through median → moving average
+  _applyDeltaA(dA) {
     const medVal = this.median.update(dA);
     const mavVal = this.mavg.update(medVal);
-    const smVal  = this.smooth.update(mavVal);
+    const pfVal  = this.particle.update(mavVal);
 
     if (this.sensitivity !== null) {
-      // Raw gram estimate
-      const rawG = smVal * this.sensitivity;
+      const rawG = pfVal * this.sensitivity;
       this.weightG = Math.max(0, rawG);
 
-      // Confidence based on signal stability (low σ = high confidence)
+      // Confidence: stable signal = high confidence
       const sigma = this.mavg.stdDev;
-      this.confidence = Math.min(1, 1 / (1 + sigma * 20));
+      this.confidence = Math.min(1, 1 / (1 + sigma * 30));
 
       this.onWeight?.(this.weightG, this.confidence);
     }
   }
 
   setBaseline(b) {
-    this.baseline = b;
-    this.kalman.reset();
-    this.mavg.reset();
-    this.median.reset();
-    this.smooth.reset();
+    this.baseline = { ax: b.ax, ay: b.ay, az: b.az };
+    this._resetFilters();
   }
 
-  calibrate(knownWeightG, currentDeltaA) {
-    if (currentDeltaA < 0.001) return false;
-    this.sensitivity = knownWeightG / currentDeltaA;
+  _resetFilters() {
+    this.kalman.reset();
+    this.median.reset();
+    this.mavg.reset();
+    this.particle.reset();
+  }
+
+  /** Add calibration point and refit sensitivity */
+  addCalPoint(knownWeightG, deltaA) {
+    if (deltaA < 0.0005) return false;
+    this.calPoints.push({ deltaA, grams: knownWeightG });
+    this._fitSensitivity();
+
+    // Classify surface quality from sensitivity
+    if      (this.sensitivity < 30)  this.surfaceQuality = 'poor';
+    else if (this.sensitivity < 100) this.surfaceQuality = 'ok';
+    else if (this.sensitivity < 300) this.surfaceQuality = 'good';
+    else                              this.surfaceQuality = 'excellent';
+
     return true;
   }
 
-  /** Return current horizontal ΔA (for use during calibration) */
+  /** Least-squares fit through origin for sensitivity */
+  _fitSensitivity() {
+    if (!this.calPoints.length) return;
+    const num = this.calPoints.reduce((a, p) => a + p.grams * p.deltaA, 0);
+    const den = this.calPoints.reduce((a, p) => a + p.deltaA * p.deltaA,  0);
+    this.sensitivity = den > 0 ? num / den : null;
+  }
+
+  /** Current horizontal ΔA for calibration reads */
   get deltaA() {
     if (!this.baseline) return 0;
     const dax = this.filtered.x - this.baseline.ax;
@@ -177,67 +199,67 @@ class MotionSensor {
   }
 
   get isStable() {
-    return this.mavg.isFull && this.mavg.stdDev < 0.003;
+    return this.mavg.isFull && this.mavg.stdDev < 0.004;
   }
+
+  get sampleRateHz() { return 1000 / (this._interval || 16); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   TouchSensor  —  pressure / force via touch events
+   TouchSensor  —  pressure / area via pointer/touch events
 ═══════════════════════════════════════════════════════════════ */
 class TouchSensor {
   constructor() {
-    this.supported  = false;
-    this.forceValue = 0;     // 0–1 normalized
-    this.weightG    = 0;
-    this.confidence = 0;
-    this.active     = false;
-    this._handlers  = {};
-    this.sensitivity = 100;  // g per unit force (calibrated separately)
-    this.onWeight   = null;
-    this.mavg = new MovingAverageFilter(20);
+    this.supported   = false;
+    this.forceValue  = 0;
+    this.weightG     = 0;
+    this.confidence  = 0;
+    this.active      = false;
+    this._handlers   = {};
+    this.sensitivity = 100;   // g per normalized force unit
+    this.mavg = new MovingAverageFilter(25);
+    this.onWeight = null;
   }
 
-  start(el) {
-    this._target = el || document.body;
-    this._handlers.start = (e) => this._onTouch(e);
-    this._handlers.move  = (e) => this._onTouch(e);
-    this._handlers.end   = ()  => this._onTouchEnd();
-    this._target.addEventListener('touchstart', this._handlers.start, { passive: true });
-    this._target.addEventListener('touchmove',  this._handlers.move,  { passive: true });
-    this._target.addEventListener('touchend',   this._handlers.end,   { passive: true });
+  start(el = document.body) {
+    this._el = el;
+    this._handlers.start = e => this._handle(e);
+    this._handlers.move  = e => this._handle(e);
+    this._handlers.end   = ()  => this._end();
+    el.addEventListener('touchstart', this._handlers.start, { passive: true });
+    el.addEventListener('touchmove',  this._handlers.move,  { passive: true });
+    el.addEventListener('touchend',   this._handlers.end,   { passive: true });
     this.active = true;
   }
 
   stop() {
-    if (!this._target) return;
-    this._target.removeEventListener('touchstart', this._handlers.start);
-    this._target.removeEventListener('touchmove',  this._handlers.move);
-    this._target.removeEventListener('touchend',   this._handlers.end);
+    if (!this._el) return;
+    this._el.removeEventListener('touchstart', this._handlers.start);
+    this._el.removeEventListener('touchmove',  this._handlers.move);
+    this._el.removeEventListener('touchend',   this._handlers.end);
     this.active = false;
   }
 
-  _onTouch(e) {
+  _handle(e) {
     if (!e.touches.length) return;
     const t = e.touches[0];
-
-    // iOS 3D Touch / Force Touch  — force is 0–1 (light) to 6.667 (max)
     let force = t.force ?? 0;
-    if (force === 0) {
-      // Fallback: use touch contact area as proxy for force
-      const area = Math.PI * (t.radiusX ?? 10) * (t.radiusY ?? 10);
-      // Typical finger area ~200–400 px²; map to 0–1
-      force = Math.min(area / 600, 1);
+    const hasForce = t.force !== undefined && t.force > 0;
+    if (!hasForce) {
+      // Fallback: contact ellipse area as proxy
+      const rx = t.radiusX ?? 12;
+      const ry = t.radiusY ?? 12;
+      force = Math.min(Math.PI * rx * ry / 700, 1);
     }
-
-    this.supported  = (t.force !== undefined && t.force > 0);
+    this.supported  = hasForce;
     this.forceValue = force;
     const avg = this.mavg.update(force);
     this.weightG    = avg * this.sensitivity;
-    this.confidence = this.supported ? 0.7 : 0.2;
+    this.confidence = hasForce ? 0.65 : 0.2;
     this.onWeight?.(this.weightG, this.confidence);
   }
 
-  _onTouchEnd() {
+  _end() {
     this.forceValue = 0;
     this.weightG    = 0;
     this.confidence = 0;
@@ -247,60 +269,60 @@ class TouchSensor {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SensorFusion  —  weighted combination of all estimates
+   BayesianFusion  —  proper weighted combination of all estimates
+   Each source has a prior reliability weight + observed confidence
 ═══════════════════════════════════════════════════════════════ */
-class SensorFusion {
+class BayesianFusion {
   constructor() {
-    this.sources = {};        // name → { weight, estimate, confidence }
-    this.fusedWeight = 0;
+    this.sources = new Map();  // name → { prior, estimate, confidence }
+    this.smooth  = new ExpSmooth(0.15);
+    this.tare    = 0;
+
+    this.fusedWeight     = 0;
     this.fusedConfidence = 0;
-    this.tare = 0;
-    this.onFused = null;      // callback(grams)
-    this._smooth = new ExpSmooth(0.18);
+    this.onFused = null;
   }
 
-  register(name, baseWeight = 1) {
-    this.sources[name] = { baseWeight, estimate: 0, confidence: 0 };
+  register(name, prior = 1.0) {
+    this.sources.set(name, { prior, estimate: 0, confidence: 0 });
   }
 
   update(name, estimateG, confidence) {
-    if (!this.sources[name]) return;
-    this.sources[name].estimate   = estimateG;
-    this.sources[name].confidence = confidence;
+    const s = this.sources.get(name);
+    if (!s) return;
+    s.estimate   = estimateG;
+    s.confidence = Math.max(0, Math.min(1, confidence));
     this._fuse();
   }
 
   _fuse() {
-    let numerator = 0, denominator = 0;
-    for (const [, s] of Object.entries(this.sources)) {
-      const w = s.baseWeight * s.confidence;
-      numerator   += s.estimate * w;
-      denominator += w;
+    let num = 0, den = 0;
+    for (const s of this.sources.values()) {
+      const w = s.prior * s.confidence;
+      num += s.estimate * w;
+      den += w;
     }
 
-    if (denominator < 0.001) {
+    if (den < 0.0001) {
       this.fusedWeight     = 0;
       this.fusedConfidence = 0;
     } else {
-      const raw = numerator / denominator;
-      this.fusedWeight     = Math.max(0, this._smooth.update(raw) - this.tare);
-      this.fusedConfidence = Math.min(1, denominator / Object.keys(this.sources).length);
+      const raw            = num / den;
+      this.fusedWeight     = Math.max(0, this.smooth.update(raw) - this.tare);
+      this.fusedConfidence = Math.min(1, den / this.sources.size);
     }
-
     this.onFused?.(this.fusedWeight, this.fusedConfidence);
   }
 
-  setTare(g) { this.tare = g; }
+  setTare(g)  { this.tare = g; }
+  clearTare() { this.tare = 0; }
 
   reset() {
-    for (const k of Object.keys(this.sources)) {
-      this.sources[k].estimate   = 0;
-      this.sources[k].confidence = 0;
-    }
-    this._smooth.reset();
+    for (const s of this.sources.values()) { s.estimate = 0; s.confidence = 0; }
+    this.smooth.reset();
     this.fusedWeight     = 0;
     this.fusedConfidence = 0;
   }
 }
 
-export { BaselineRecorder, MotionSensor, TouchSensor, SensorFusion };
+export { BaselineRecorder, MotionSensor, TouchSensor, BayesianFusion };

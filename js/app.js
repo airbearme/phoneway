@@ -1,170 +1,224 @@
 /**
- * app.js — Main application for Phoneway Precision Scale
+ * app.js — Phoneway Precision Scale — Main application
  *
- * State machine:
- *   IDLE → ONBOARD → ZEROING → CALIBRATING → READY → MEASURING → STABLE
- *   Any state → HOLD (frozen display)
+ * Sensor stack (priority order):
+ *  1. Generic Sensor API / LinearAccelerationSensor  (best, Android Chrome)
+ *  2. DeviceMotionEvent accelerometer                (universal fallback)
+ *  3. Vibration-hammer resonance                     (novel! vibrate + capture)
+ *  4. Web Audio API microphone resonance             (FFT, 44100 Hz)
+ *  5. Touch force / contact area                     (secondary)
+ *  6. Magnetometer anomaly                           (metal objects only)
  *
  * Calibration with everyday objects:
- *   US Dollar bill  = 1.00 g
- *   US Penny        = 2.50 g
- *   US Nickel       = 5.00 g
- *   US Dime         = 2.27 g
- *   US Quarter      = 5.67 g
- *   US Dollar coin  = 8.10 g
+ *  💵 US Dollar bill  = 1.00 g   (any denomination)
+ *  🪙 US Penny        = 2.50 g
+ *  🪙 US Dime         = 2.27 g
+ *  🪙 US Nickel       = 5.00 g   ← recommended primary
+ *  🪙 US Quarter      = 5.67 g
+ *  🪙 US Dollar coin  = 8.10 g
+ *  (+ more international coins)
+ *
+ * For maximum accuracy: use BOTH a nickel (5g) AND a dollar bill (1g)
+ * — two calibration points give a least-squares fit through origin.
  */
 
 'use strict';
 
-import { BaselineRecorder, MotionSensor, TouchSensor, SensorFusion }
+import { BaselineRecorder, MotionSensor, TouchSensor, BayesianFusion }
   from './sensors.js';
-import { AudioAnalyzer }                    from './audio.js';
+import { AudioAnalyzer }         from './audio.js';
+import { VibrationHammer }       from './vibrationHammer.js';
+import { GenericSensorManager }  from './genericSensors.js';
 import { SevenSegmentDisplay, StabilityBar, LED, delay } from './display.js';
 
-/* ─── Known calibration weights ──────────────────────────────── */
-const CAL_WEIGHTS = [
-  { label: 'US Dollar bill',  grams: 1.00, icon: '💵', tip: 'Any US paper bill (any denomination)' },
-  { label: 'US Penny',        grams: 2.50, icon: '🪙', tip: 'Post-1982 Lincoln penny' },
-  { label: 'US Dime',         grams: 2.27, icon: '🪙', tip: 'US 10-cent coin' },
-  { label: 'US Nickel',       grams: 5.00, icon: '🪙', tip: 'US 5-cent coin (most common ref)' },
-  { label: 'US Quarter',      grams: 5.67, icon: '🪙', tip: 'US 25-cent coin' },
-  { label: 'US Dollar coin',  grams: 8.10, icon: '🪙', tip: 'Sacagawea / Presidential dollar' },
-  { label: 'Euro (1€)',       grams: 7.50, icon: '🪙', tip: '1 euro coin' },
-  { label: 'UK 10p',          grams: 6.50, icon: '🪙', tip: 'UK 10 pence coin' },
-  { label: 'Canadian Loonie', grams: 7.00, icon: '🪙', tip: 'Canadian $1 coin' },
-  { label: 'Custom…',         grams: null, icon: '⚖️', tip: 'Enter your own known weight' },
+/* ── Known calibration weights ────────────────────────────── */
+export const CAL_WEIGHTS = [
+  { label: 'Dollar Bill',    grams: 1.00, icon: '💵', tip: 'Any US paper bill — any denomination equals exactly 1 gram' },
+  { label: 'US Penny',       grams: 2.50, icon: '🪙', tip: 'Post-1982 Lincoln cent — keep one handy as your 2.5g reference' },
+  { label: 'US Dime',        grams: 2.27, icon: '🪙', tip: 'US 10-cent coin' },
+  { label: 'US Nickel',      grams: 5.00, icon: '🪙', tip: 'US 5-cent coin — best primary calibration weight' },
+  { label: 'US Quarter',     grams: 5.67, icon: '🪙', tip: 'US 25-cent coin' },
+  { label: 'US Dollar Coin', grams: 8.10, icon: '🪙', tip: 'Sacagawea / Presidential dollar coin' },
+  { label: 'Canadian Loonie',grams: 7.00, icon: '🪙', tip: 'Canadian $1 coin' },
+  { label: 'Euro (1€)',      grams: 7.50, icon: '🪙', tip: '1 euro coin' },
+  { label: 'UK 10p',         grams: 6.50, icon: '🪙', tip: 'UK 10 pence coin' },
+  { label: '2× Nickel',      grams: 10.00, icon: '🪙🪙', tip: 'Stack 2 US nickels for a 10g reference' },
+  { label: 'Custom…',        grams: null,  icon: '⚖️', tip: 'Enter your own known weight in grams' },
 ];
 
 const UNITS = [
-  { key: 'g',   label: 'g',   factor: 1 },
-  { key: 'oz',  label: 'oz',  factor: 0.035274 },
-  { key: 'ct',  label: 'ct',  factor: 5.0 },      // carats
-  { key: 'dwt', label: 'dwt', factor: 0.643015 },  // pennyweight
+  { key: 'g',   label: 'g',   factor: 1,         places: 1 },
+  { key: 'oz',  label: 'oz',  factor: 0.035274,  places: 3 },
+  { key: 'ct',  label: 'ct',  factor: 5.0,       places: 2 },
+  { key: 'dwt', label: 'dwt', factor: 0.643015,  places: 3 },
 ];
 
-const MODES = ['FUSION', 'ACCEL', 'AUDIO', 'TOUCH'];
+const MODES  = ['FUSION', 'ACCEL', 'AUDIO', 'HAMMER', 'TOUCH'];
+
+const SURFACE_TIPS = {
+  poor:      '⚠ Hard surface — move to notebook or mouse-pad for best accuracy',
+  ok:        '◑ Decent surface — mouse-pad would improve accuracy',
+  good:      '✓ Good surface — readings will be accurate',
+  excellent: '★ Excellent surface — maximum accuracy mode',
+  unknown:   '○ Calibrate to assess surface quality',
+};
 
 /* ═══════════════════════════════════════════════════════════════
    PhonewayApp
 ═══════════════════════════════════════════════════════════════ */
 class PhonewayApp {
   constructor() {
-    this.state    = 'IDLE';
-    this.unitIdx  = 0;
-    this.modeIdx  = 0;
-    this.held     = false;
-    this.calWeightG = null;
+    this.state      = 'IDLE';
+    this.unitIdx    = 0;
+    this.modeIdx    = 0;
+    this.held       = false;
+    this.powered    = true;
+    this.calWeightG = 5.0;    // default: nickel
 
     // Sensors
-    this.motion   = new MotionSensor();
-    this.touch    = new TouchSensor();
-    this.audio    = new AudioAnalyzer();
-    this.baseline = new BaselineRecorder(150);
-    this.fusion   = new SensorFusion();
+    this.motion    = new MotionSensor();
+    this.touch     = new TouchSensor();
+    this.audio     = new AudioAnalyzer();
+    this.hammer    = new VibrationHammer();
+    this.genSensor = new GenericSensorManager();
+    this.baseline  = new BaselineRecorder(200);
+    this.fusion    = new BayesianFusion();
 
-    // Display
-    this.display  = null;
-    this.stabBar  = null;
-    this.ledPower = null;
+    // Display refs
+    this.display   = null;
+    this.stabBar   = null;
+    this.ledPower  = null;
     this.ledStable = null;
+    this.ledAudio  = null;
 
-    // Calibration data (multi-point)
-    this.calPoints = [];   // [{ deltaA, grams }, ...]
+    // Calibration
+    this.calPhase  = 0;   // 0=not done, 1=first weight done, 2=complete
+    this.firstCalG = 0;
+    this.firstDeltaA = 0;
 
-    // Settings
-    this.settings = this._loadSettings();
-
-    // Realtime weight state
-    this.currentG = 0;
-    this.stableCount = 0;
-    this.STABLE_THRESHOLD = 0.3;   // g variance to declare stable
-    this.STABLE_SAMPLES   = 25;
-
+    // Measurement state
+    this.currentG   = 0;
     this._stableBuf = [];
+    this.STABLE_WIN = 30;
+    this.STABLE_THR = 0.15;  // g variance below which = stable
+
+    // Settings persistence
+    this.settings = this._loadSettings();
   }
 
-  /* ── Bootstrap ─────────────────────────────────────────────── */
+  /* ── Boot ─────────────────────────────────────────────────── */
   async boot() {
     this._bindUI();
     this._initDisplay();
+    this._initSensorBars();
+
     await this.display.startup();
+    this.ledPower.on('green');
+
+    // Register all fusion sources with prior reliability weights
+    this.fusion.register('accel',  1.0);   // primary
+    this.fusion.register('hammer', 0.9);   // almost as good
+    this.fusion.register('audio',  0.8);   // good when calibrated
+    this.fusion.register('touch',  0.35);  // coarse
+    this.fusion.register('mag',    0.3);   // metal objects only
+
+    // Wire fusion callbacks
+    this.motion.onWeight  = (g, c) => this._sensorUpdate('accel',  g, c);
+    this.audio.onWeight   = (g, c) => this._sensorUpdate('audio',  g, c);
+    this.touch.onWeight   = (g, c) => this._sensorUpdate('touch',  g, c);
+    this.hammer.onWeight  = (g, c) => this._sensorUpdate('hammer', g, c);
+
+    this.motion.onRaw     = (ax, ay, az) => {
+      this.hammer.feedSample(ax, ay);  // vibration hammer needs raw accel
+      this._updateSensorBar('accelBar', Math.sqrt(ax*ax + ay*ay), 0.2);
+    };
+
+    this.fusion.onFused = (g, c) => this._onFused(g, c);
+
+    // Generic Sensor API (mag anomaly → fusion)
+    this.genSensor.onMagAnomaly = (delta, conf) => {
+      // Convert magnetic anomaly to rough mass estimate
+      // ~1 µT per gram for ferromagnetic objects (very rough)
+      const roughG = Math.abs(delta) * 0.8;
+      this._sensorUpdate('mag', roughG, conf * 0.3);
+    };
+
+    this.genSensor.onLinAccel = (lax, lay) => {
+      // Higher-quality linear acceleration from Generic Sensor API
+      // Inject into motion sensor's pipeline (bypasses DeviceMotion baseline)
+      const dA = Math.sqrt(lax * lax + lay * lay);
+      if (this.motion.sensitivity) {
+        const g = Math.max(0, dA * this.motion.sensitivity);
+        this._sensorUpdate('accel', g, 0.85);  // higher confidence
+      }
+      this._updateSensorBar('accelBar', dA, 0.2);
+    };
+
     this._setState('IDLE');
 
-    // Register fusion sources
-    this.fusion.register('accel', 1.0);
-    this.fusion.register('audio', 0.8);
-    this.fusion.register('touch', 0.4);
+    // Handle URL params
+    const params = new URLSearchParams(location.search);
+    if (params.get('cal')) {
+      this._showOnboard();
+      return;
+    }
 
-    this.fusion.onFused = (g, conf) => this._onFused(g, conf);
-
-    // Wire up sensors → fusion
-    this.motion.onWeight = (g, c) => {
-      if (this.modeIdx === 0 || this.modeIdx === 1) // FUSION or ACCEL
-        this.fusion.update('accel', g, c);
-    };
-    this.audio.onWeight = (g, c) => {
-      if (this.modeIdx === 0 || this.modeIdx === 2) // FUSION or AUDIO
-        this.fusion.update('audio', g, c);
-    };
-    this.touch.onWeight = (g, c) => {
-      if (this.modeIdx === 0 || this.modeIdx === 3) // FUSION or TOUCH
-        this.fusion.update('touch', g, c);
-    };
-    this.motion.onRaw = (ax, ay, az) => this._updateSensorUI(ax, ay, az);
-
-    // Check if already calibrated
     if (this.settings.calibrated) {
-      await this._showMessage('READY');
+      this.motion.sensitivity = this.settings.motionSensitivity;
+      this.motion.baseline    = this.settings.motionBaseline;
+      this.hammer.baselineFreq = this.settings.hammerBaselineFreq;
+      this.hammer.phoneMass    = this.settings.phoneMass || 170;
+      this.audio.baselineFreq  = this.settings.audioBaselineFreq;
+      this.audio.phoneMass     = this.settings.phoneMass || 170;
+      await this._startAllSensors();
       this._setState('READY');
-      this._startSensors();
     } else {
       this._showOnboard();
     }
   }
 
-  /* ── UI Binding ─────────────────────────────────────────────── */
+  /* ── UI Binding ───────────────────────────────────────────── */
   _bindUI() {
-    this._btn('btnTare',  () => this._tare());
-    this._btn('btnMode',  () => this._cycleMode());
-    this._btn('btnUnits', () => this._cycleUnits());
-    this._btn('btnCal',   () => this._startCalibration());
-    this._btn('btnHold',  () => this._toggleHold());
-    this._btn('btnPower', () => this._togglePower());
-    this._btn('btnLight', () => this._toggleBacklight());
+    const b = (id, fn) => document.getElementById(id)?.addEventListener('click', fn);
+    b('btnTare',   () => this._tare());
+    b('btnMode',   () => this._cycleMode());
+    b('btnUnits',  () => this._cycleUnits());
+    b('btnCal',    () => this._triggerCal());
+    b('btnHold',   () => this._toggleHold());
+    b('btnPower',  () => this._togglePower());
+    b('btnLight',  () => this._toggleLight());
+    b('btnHammer', () => this._runHammerMeasure());
 
-    // Touch pad for touch-force weighing
+    // Touch pad for contact-pressure weighing
     const pad = document.getElementById('touchPad');
     if (pad) this.touch.start(pad);
 
-    // Haptic on all buttons
-    document.querySelectorAll('.btn').forEach(b => {
-      b.addEventListener('pointerdown', () => this._haptic([10]));
+    // Haptic feedback on all buttons
+    document.querySelectorAll('.btn').forEach(el => {
+      el.addEventListener('pointerdown', () => this._haptic([8]));
     });
   }
 
-  _btn(id, fn) {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('click', fn);
-  }
-
   _initDisplay() {
-    const dispEl   = document.getElementById('digitDisplay');
-    const stabEl   = document.getElementById('stabilityBar');
-    const ledPwr   = document.getElementById('ledPower');
-    const ledStb   = document.getElementById('ledStable');
-
-    this.display   = new SevenSegmentDisplay(dispEl, 5, 1);
-    this.stabBar   = new StabilityBar(stabEl);
-    this.ledPower  = new LED(ledPwr);
-    this.ledStable = new LED(ledStb);
-
-    this.ledPower.on('green');
+    this.display   = new SevenSegmentDisplay(document.getElementById('digitDisplay'), 5, 1);
+    this.stabBar   = new StabilityBar(document.getElementById('stabilityBar'));
+    this.ledPower  = new LED(document.getElementById('ledPower'));
+    this.ledStable = new LED(document.getElementById('ledStable'));
+    this.ledAudio  = new LED(document.getElementById('ledAudio'));
   }
 
-  /* ── State Machine ──────────────────────────────────────────── */
+  _initSensorBars() {
+    ['accelBar','audioBar','touchBar','hammerBar'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.width = '0%';
+    });
+  }
+
+  /* ── State Machine ────────────────────────────────────────── */
   _setState(s) {
     this.state = s;
-    document.getElementById('statusText').textContent = s;
+    const el = document.getElementById('statusText');
+    if (el) el.textContent = s;
 
     switch (s) {
       case 'READY':
@@ -176,7 +230,7 @@ class PhonewayApp {
         break;
       case 'STABLE':
         this.ledStable.on('green');
-        this._haptic([30, 20, 30]);
+        this._haptic([20, 15, 20]);
         break;
       case 'ZEROING':
         this.display.showTare();
@@ -184,349 +238,396 @@ class PhonewayApp {
         break;
       case 'CALIBRATING':
         this.display.showCalibrate();
-        break;
-      case 'HOLD':
-        this.display.showHold();
+        this.ledStable.on('blue');
         break;
     }
   }
 
-  /* ── Sensor Start/Stop ─────────────────────────────────────── */
-  async _startSensors() {
+  /* ── Sensor Start ─────────────────────────────────────────── */
+  async _startAllSensors() {
+    // Generic Sensor API first (best accuracy on Android)
+    const avail = await this.genSensor.init(60).catch(() => ({}));
+    if (avail.linAccel) {
+      this._showToast('High-accuracy linear sensor active', 2500);
+    }
+
+    // DeviceMotion fallback (always try)
     try {
       await this.motion.request();
       this.motion.start();
-    } catch (e) {
-      this._showToast('Motion sensor denied — tap screen to enable', 4000);
+    } catch {
+      this._showToast('Motion access denied — accuracy reduced', 3500);
     }
 
-    try {
-      await this.audio.init();
-      this.audio.start();
-    } catch (e) {
-      this._showToast('Microphone not available — audio mode disabled', 3000);
-    }
+    // Audio (mic)
+    this.audio.onReady = () => {
+      this.ledAudio.on('green');
+      this._updateSensorBar('audioBar', 0.3, 1);
+    };
+    this.audio.onError = () => {
+      this.ledAudio.off();
+      this._showToast('Mic unavailable — audio mode disabled', 2500);
+    };
+    await this.audio.init().catch(() => {});
+    if (this.audio.supported) this.audio.start();
 
-    // Restore calibration
-    if (this.settings.calibrated) {
-      this.motion.sensitivity = this.settings.motionSensitivity;
-      this.motion.baseline    = this.settings.motionBaseline;
-    }
+    // Magnetometer
+    await delay(200);
+    this.genSensor.recordMagBaseline();
+
+    // Update hammer sample rate from motion sensor
+    this.hammer.setSampleRate(this.motion.sampleRateHz);
   }
 
-  /* ── Onboarding ─────────────────────────────────────────────── */
+  /* ── Onboarding + Calibration ──────────────────────────────── */
   _showOnboard() {
     const modal = document.getElementById('onboardModal');
     if (!modal) return;
     modal.style.display = 'flex';
+    this._buildCalWeightList(modal.querySelector('.cal-weight-list'));
 
-    // Populate weight picker
-    const list = modal.querySelector('.cal-weight-list');
-    list.innerHTML = '';
+    modal.querySelector('#startCalBtn')?.addEventListener('click', () => {
+      modal.style.display = 'none';
+      this._runFullCalibration();
+    });
+    modal.querySelector('#skipCalBtn')?.addEventListener('click', () => {
+      modal.style.display = 'none';
+      this.motion.sensitivity = 180;
+      this._startAllSensors().then(() => this._setState('READY'));
+    });
+  }
+
+  _buildCalWeightList(container) {
+    if (!container) return;
+    container.innerHTML = '';
     CAL_WEIGHTS.forEach((w, i) => {
       const item = document.createElement('div');
       item.className = 'cal-item';
+      item.dataset.idx = i;
       item.innerHTML = `
         <span class="cal-icon">${w.icon}</span>
         <div class="cal-info">
           <strong>${w.label}</strong>
-          <small>${w.grams ? w.grams.toFixed(2) + ' g' : '?'} — ${w.tip}</small>
+          <small>${w.grams != null ? w.grams.toFixed(2) + ' g' : '?'} — ${w.tip}</small>
         </div>`;
       item.addEventListener('click', () => {
-        list.querySelectorAll('.cal-item').forEach(e => e.classList.remove('selected'));
+        container.querySelectorAll('.cal-item').forEach(e => e.classList.remove('selected'));
         item.classList.add('selected');
-        if (w.grams) {
-          this.calWeightG = w.grams;
-          modal.querySelector('.custom-weight-row').style.display = 'none';
-        } else {
-          modal.querySelector('.custom-weight-row').style.display = 'flex';
-        }
+        const isCustom = w.grams === null;
+        const customRow = document.querySelector('.custom-weight-row');
+        if (customRow) customRow.style.display = isCustom ? 'flex' : 'none';
+        if (!isCustom) this.calWeightG = w.grams;
       });
-      list.appendChild(item);
-      // Pre-select nickel
-      if (i === 3) item.click();
+      container.appendChild(item);
+      if (i === 3) item.click(); // pre-select nickel
     });
 
-    // Custom weight input
-    const customInput = modal.querySelector('#customWeightInput');
-    customInput?.addEventListener('input', () => {
-      const v = parseFloat(customInput.value);
+    document.getElementById('customWeightInput')?.addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
       if (!isNaN(v) && v > 0) this.calWeightG = v;
     });
-
-    // Start calibration button in modal
-    modal.querySelector('#startCalBtn')?.addEventListener('click', () => {
-      modal.style.display = 'none';
-      this._runCalibration();
-    });
-
-    // Skip (less accurate)
-    modal.querySelector('#skipCalBtn')?.addEventListener('click', () => {
-      modal.style.display = 'none';
-      this.calWeightG = null;
-      this.motion.sensitivity = 200; // rough default
-      this._startSensors().then(() => this._setState('READY'));
-    });
   }
 
-  /* ── Calibration ────────────────────────────────────────────── */
-  async _startCalibration() {
+  _triggerCal() {
     if (this.state === 'IDLE') { this._showOnboard(); return; }
-    this._showCalModal();
+    const ov = document.getElementById('calOverlay');
+    if (!ov) return;
+    ov.style.display = 'flex';
+    ov.querySelector('#calConfirmBtn')?.addEventListener('click', () => {
+      ov.style.display = 'none';
+      this.motion.calPoints = [];
+      this.calPhase = 0;
+      this._runFullCalibration();
+    }, { once: true });
+    ov.querySelector('#calCancelBtn')?.addEventListener('click', () => {
+      ov.style.display = 'none';
+    }, { once: true });
   }
 
-  _showCalModal() {
-    const overlay = document.getElementById('calOverlay');
-    if (overlay) {
-      overlay.style.display = 'flex';
-      overlay.querySelector('#calConfirmBtn')?.addEventListener('click', () => {
-        overlay.style.display = 'none';
-        this._runCalibration();
-      }, { once: true });
-      overlay.querySelector('#calCancelBtn')?.addEventListener('click', () => {
-        overlay.style.display = 'none';
-      }, { once: true });
-    }
-  }
+  /* ── Full calibration sequence ────────────────────────────── */
+  async _runFullCalibration() {
+    await this._startAllSensors();
+    this._setState('CALIBRATING');
 
-  async _runCalibration() {
-    await this._startSensors();
-    this._setState('ZEROING');
+    // ─── Step 1: Zero baseline ───────────────────────────────
+    await this._showStepOverlay(
+      'STEP 1 OF 3 — ZERO',
+      `Place phone face-up on a SOFT, FLAT surface:\n\n` +
+      `   ✓ Mouse pad\n   ✓ Notebook / magazine\n   ✓ Folded cloth\n\n` +
+      `Remove ALL objects from the phone.\nDo not touch or move it.\n\nHolding still…`
+    );
 
-    // Step 1: Zero / baseline
-    await this._showMessage('Place phone on a soft surface.\nRemove all objects.\nHold still…');
-
-    const progressEl = document.getElementById('calProgress');
-    const msgEl      = document.getElementById('calMessage');
-
+    this._setCalProgress(0);
     this.baseline.reset();
-    this.baseline.onComplete = async (b) => {
-      this.motion.setBaseline(b);
-      await this._calibrateSpan();
-    };
 
-    // Poll progress
-    const ticker = setInterval(() => {
-      const p = this.baseline.progress * 100;
-      if (progressEl) progressEl.style.width = p + '%';
-    }, 50);
-
-    // Feed baseline recorder from motion sensor
+    // Set up baseline recording
     const origOnRaw = this.motion.onRaw;
     this.motion.onRaw = (ax, ay, az) => {
       origOnRaw?.(ax, ay, az);
       this.baseline.feed(ax, ay, az);
+      this._setCalProgress(this.baseline.progress * 60);
     };
 
-    // Wait until baseline complete
     await new Promise(res => {
-      const check = setInterval(() => {
-        if (this.baseline.done) { clearInterval(check); res(); }
-      }, 100);
+      this.baseline.onComplete = async b => {
+        this.motion.setBaseline(b);
+        res();
+      };
     });
 
-    clearInterval(ticker);
     this.motion.onRaw = origOnRaw;
-  }
+    this._setCalProgress(65);
 
-  async _calibrateSpan() {
-    this._setState('CALIBRATING');
-
-    const weightG = this.calWeightG ?? 5.0;
-    const msg = `Now place your calibration weight on the CENTER of the screen.\n\n` +
-                `Selected: ${weightG.toFixed(2)} g\n\nHold steady…`;
-    await this._showMessage(msg);
-
-    await delay(3000); // wait for user to place weight
-
-    // Sample deltaA for 3 seconds
-    const samples = [];
-    const dur = 3000;
-    const t0  = Date.now();
-
-    await new Promise(res => {
-      const iv = setInterval(() => {
-        samples.push(this.motion.deltaA);
-        if (Date.now() - t0 >= dur) { clearInterval(iv); res(); }
-      }, 50);
-    });
-
-    const avgDeltaA = samples.reduce((a, b) => a + b, 0) / samples.length;
-
-    if (avgDeltaA < 0.0005) {
-      this._showToast('Signal too weak — try a softer surface or heavier weight', 4000);
-      this._setState('READY');
-      return;
+    // Record hammer baseline while we're at it
+    if (this.hammer.supported) {
+      await this._showStepOverlay(
+        'STEP 1b — VIBRATION CALIBRATION',
+        `Stay still — phone will vibrate ${6} times to measure resonance.\n\nThis improves accuracy significantly.`
+      );
+      await this.hammer.calibrateBaseline(6, (i, n) => {
+        this._setCalProgress(65 + (i / n) * 15);
+      });
     }
 
-    // Store calibration point
-    this.calPoints.push({ deltaA: avgDeltaA, grams: weightG });
-    this.motion.calibrate(weightG, avgDeltaA);
-
-    // Multi-point: ask for second weight if possible
-    if (this.calPoints.length < 2) {
-      const wantSecond = await this._askSecondCalibration();
-      if (wantSecond) {
-        // Pick a different known weight
-        await this._secondCalPoint();
-      }
+    // Record audio baseline
+    if (this.audio.supported) {
+      await this._showStepOverlay(
+        'STEP 1c — AUDIO BASELINE',
+        `Playing calibration tone…\nKeep phone still and quiet.`
+      );
+      await this.audio.recordBaseline(true).catch(() => {});
     }
 
-    // Save settings
-    this.settings.calibrated        = true;
-    this.settings.motionSensitivity = this.motion.sensitivity;
-    this.settings.motionBaseline    = this.motion.baseline;
+    this._setCalProgress(80);
+
+    // ─── Step 2: First calibration weight ─────────────────────
+    await this._showStepOverlay(
+      'STEP 2 OF 3 — FIRST WEIGHT',
+      `Gently place your calibration weight in the\nCENTER of the phone screen.\n\n` +
+      `Selected: ${this.calWeightG.toFixed(2)} g\n\n` +
+      `💵 Dollar bill = 1.00 g\n` +
+      `🪙 Penny       = 2.50 g\n` +
+      `🪙 Nickel      = 5.00 g\n\n` +
+      `Hold PERFECTLY still for 4 seconds…`
+    );
+
+    const deltaA1 = await this._measureDeltaA(4000, pct => this._setCalProgress(80 + pct * 10));
+    this.firstDeltaA = deltaA1;
+    this.firstCalG   = this.calWeightG;
+    this.motion.addCalPoint(this.calWeightG, deltaA1);
+    this._setCalProgress(90);
+
+    // ─── Step 3: Second calibration weight for accuracy ───────
+    const secondOffer = await this._offerSecondWeight();
+    if (secondOffer) {
+      const secondW = secondOffer;
+      await this._showStepOverlay(
+        'STEP 3 OF 3 — SECOND WEIGHT',
+        `Remove the first weight.\nPlace: ${secondW.label} (${secondW.grams.toFixed(2)} g)\n\nHold still for 4 seconds…`
+      );
+      const deltaA2 = await this._measureDeltaA(4000, pct => this._setCalProgress(90 + pct * 7));
+      this.motion.addCalPoint(secondW.grams, deltaA2);
+    }
+
+    this._setCalProgress(98);
+
+    // ─── Persist settings ─────────────────────────────────────
+    this.settings.calibrated          = true;
+    this.settings.motionSensitivity   = this.motion.sensitivity;
+    this.settings.motionBaseline      = this.motion.baseline;
+    this.settings.hammerBaselineFreq  = this.hammer.baselineFreq;
+    this.settings.audioBaselineFreq   = this.audio.baselineFreq;
+    this.settings.phoneMass           = this.hammer.phoneMass;
+    this.settings.surfaceQuality      = this.motion.surfaceQuality;
     this._saveSettings();
 
-    this._haptic([50, 40, 50, 40, 200]);
-    await this._showMessage(`✓ Calibrated!\nSensitivity: ${this.motion.sensitivity?.toFixed(1)} g/(m/s²)`);
-    await delay(1500);
-    this._setState('READY');
-  }
+    this._setCalProgress(100);
 
-  async _askSecondCalibration() {
-    return new Promise(res => {
-      const toast = document.createElement('div');
-      toast.className = 'second-cal-toast';
-      toast.innerHTML = `
-        <p>Add a second calibration point for better accuracy?</p>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button id="secCalYes" class="btn btn-sm">Yes</button>
-          <button id="secCalNo"  class="btn btn-sm">Skip</button>
-        </div>`;
-      document.body.appendChild(toast);
-      toast.querySelector('#secCalYes').onclick = () => { toast.remove(); res(true); };
-      toast.querySelector('#secCalNo').onclick  = () => { toast.remove(); res(false); };
-      setTimeout(() => { toast.remove(); res(false); }, 10000);
-    });
-  }
-
-  async _secondCalPoint() {
-    // Suggest complementary weight
-    const usedG   = this.calPoints[0].grams;
-    const suggest = CAL_WEIGHTS.find(w => w.grams && Math.abs(w.grams - usedG) > 1);
-    const newG    = suggest?.grams ?? 2.5;
-
-    await this._showMessage(
-      `Remove previous weight.\nPlace: ${suggest?.label ?? 'another weight'} (${newG.toFixed(2)} g)\nHold steady…`
+    const sq = this.motion.surfaceQuality;
+    this._haptic([40, 20, 40, 20, 200]);
+    await this._showStepOverlay(
+      '✓ CALIBRATION COMPLETE',
+      `Sensitivity: ${this.motion.sensitivity?.toFixed(1)} g/(m·s⁻²)\n` +
+      `Surface: ${sq?.toUpperCase()}\n${SURFACE_TIPS[sq] || ''}\n\n` +
+      (this.hammer.baselineFreq ? `Hammer baseline: ${this.hammer.baselineFreq.toFixed(2)} Hz\n` : '') +
+      (this.audio.baselineFreq  ? `Audio baseline:  ${this.audio.baselineFreq.toFixed(1)} Hz\n` : '') +
+      `\nYour scale is ready!`
     );
-    await delay(3000);
 
+    await delay(2500);
+    this._hideStepOverlay();
+    this._setState('READY');
+    this._showSurfaceTip();
+  }
+
+  async _measureDeltaA(durationMs, onProgress) {
     const samples = [];
-    await new Promise(res => {
-      const iv = setInterval(() => {
-        samples.push(this.motion.deltaA);
-        if (samples.length >= 60) { clearInterval(iv); res(); }
-      }, 50);
-    });
+    const step = 50;
+    const steps = durationMs / step;
+    for (let i = 0; i < steps; i++) {
+      await delay(step);
+      samples.push(this.motion.deltaA);
+      onProgress?.(i / steps);
+    }
+    // Reject outliers (> 2σ from mean)
+    const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+    const std  = Math.sqrt(samples.reduce((a, b) => a + (b - mean) ** 2, 0) / samples.length);
+    const clean = samples.filter(v => Math.abs(v - mean) < 2 * std);
+    return clean.reduce((a, b) => a + b, 0) / (clean.length || 1);
+  }
 
-    const avgDeltaA = samples.reduce((a, b) => a + b, 0) / samples.length;
-    if (avgDeltaA > 0.001) {
-      this.calPoints.push({ deltaA: avgDeltaA, grams: newG });
-      // Refit sensitivity using least squares through origin
-      const num = this.calPoints.reduce((a, p) => a + p.grams * p.deltaA, 0);
-      const den = this.calPoints.reduce((a, p) => a + p.deltaA * p.deltaA, 0);
-      this.motion.sensitivity = num / den;
+  async _offerSecondWeight() {
+    return new Promise(res => {
+      const used = this.calWeightG;
+      // Suggest a complementary weight (different from first)
+      const suggestions = CAL_WEIGHTS.filter(w =>
+        w.grams !== null && Math.abs(w.grams - used) > 0.8 && w.grams < 10
+      );
+      const suggest = suggestions[0];
+      if (!suggest) { res(null); return; }
+
+      const el = document.createElement('div');
+      el.className = 'second-cal-toast';
+      el.innerHTML = `
+        <p style="font-size:9px;letter-spacing:1px;color:#bbb;margin-bottom:8px">
+          Add a 2nd weight for <strong style="color:#e8c84a">higher accuracy?</strong>
+        </p>
+        <p style="font-size:8px;color:#888;margin-bottom:10px">
+          ${suggest.icon} ${suggest.label} (${suggest.grams.toFixed(2)} g)
+        </p>
+        <div style="display:flex;gap:8px">
+          <button id="secYes" class="btn-sm">YES — MORE ACCURATE</button>
+          <button id="secNo"  class="btn-sm" style="background:#222;color:#666;border:1px solid #333">SKIP</button>
+        </div>`;
+      document.body.appendChild(el);
+
+      const cleanup = (v) => { el.remove(); res(v); };
+      el.querySelector('#secYes').onclick = () => cleanup(suggest);
+      el.querySelector('#secNo').onclick  = () => cleanup(null);
+      setTimeout(() => cleanup(null), 12000);
+    });
+  }
+
+  /* ── Vibration Hammer on-demand ───────────────────────────── */
+  async _runHammerMeasure() {
+    if (!this.hammer.supported || !this.hammer.baselineFreq) {
+      this._showToast('Hammer not calibrated. Run CAL first.', 2500);
+      return;
+    }
+    this._haptic([15, 10, 15]);
+    this._showToast('Vibrating to measure — hold still…', 3000);
+    this._updateSensorBar('hammerBar', 0.5, 0.5);
+    const result = await this.hammer.measure(4);
+    if (result) {
+      this._sensorUpdate('hammer', result.grams, result.confidence);
+      this._updateSensorBar('hammerBar', result.confidence, 1);
     }
   }
 
-  /* ── Tare ───────────────────────────────────────────────────── */
+  /* ── Tare ─────────────────────────────────────────────────── */
   async _tare() {
-    if (this.state === 'IDLE') return;
-    this._haptic([20, 20, 100]);
+    if (!this.powered) return;
+    this._haptic([15, 10, 60]);
     this._setState('ZEROING');
-    this.display.showTare();
-    await delay(800);
+    await delay(500);
     this.fusion.setTare(this.currentG);
     this.motion.setBaseline(this.motion.raw);
+    this._stableBuf = [];
     this._setState('READY');
     this.display.setValue(0);
     this._haptic([200]);
   }
 
-  /* ── Hold ───────────────────────────────────────────────────── */
+  /* ── Hold / Power / Light ─────────────────────────────────── */
   _toggleHold() {
     this.held = !this.held;
-    const btn = document.getElementById('btnHold');
-    if (btn) btn.classList.toggle('btn-active', this.held);
+    document.getElementById('btnHold')?.classList.toggle('btn-active', this.held);
     if (!this.held) this._setState('READY');
-    this._haptic([15]);
+    this._haptic([12]);
   }
 
-  /* ── Power ──────────────────────────────────────────────────── */
   _togglePower() {
-    const off = this.state === 'OFF';
-    if (off) {
-      this.ledPower.on('green');
+    this.powered = !this.powered;
+    this.ledPower[this.powered ? 'on' : 'off'](this.powered ? 'green' : null);
+    if (this.powered) {
       this._setState('READY');
-      this._startSensors();
     } else {
       this.motion.stop();
       this.audio.stop();
+      this.genSensor.stop();
       this.display.setValue(null);
-      this.ledPower.off();
       this.ledStable.off();
+      this.ledAudio.off();
       this.state = 'OFF';
       document.getElementById('statusText').textContent = 'OFF';
     }
-    this._haptic([30]);
+    this._haptic([25]);
   }
 
-  /* ── Backlight ──────────────────────────────────────────────── */
-  _toggleBacklight() {
+  _toggleLight() {
     document.documentElement.classList.toggle('dim-mode');
-    this._haptic([10]);
+    this._haptic([8]);
   }
 
-  /* ── Units & Mode cycles ────────────────────────────────────── */
+  /* ── Cycles ───────────────────────────────────────────────── */
   _cycleUnits() {
     this.unitIdx = (this.unitIdx + 1) % UNITS.length;
-    const u = UNITS[this.unitIdx];
-    document.getElementById('unitLabel').textContent = u.label;
-    this._haptic([15]);
+    document.getElementById('unitLabel').textContent = UNITS[this.unitIdx].label;
+    this._haptic([12]);
     this._updateReadout(this.currentG);
   }
 
   _cycleMode() {
     this.modeIdx = (this.modeIdx + 1) % MODES.length;
-    document.getElementById('modeLabel').textContent = MODES[this.modeIdx];
-    this._haptic([15]);
-    // Reset fusion confidence weights for new mode
+    const mode = MODES[this.modeIdx];
+    document.getElementById('modeLabel').textContent = mode;
+    this._haptic([12]);
     this.fusion.reset();
+    this._showToast(`Mode: ${mode}`, 1500);
   }
 
-  /* ── Measurement output ─────────────────────────────────────── */
+  _sensorUpdate(name, g, conf) {
+    const modeToSensor = { 1: 'accel', 2: 'audio', 3: 'hammer', 4: 'touch' };
+    if (this.modeIdx === 0 || modeToSensor[this.modeIdx] === name) {
+      this.fusion.update(name, g, conf);
+    }
+
+    // Update sensor bars
+    const barMap = { accel: 'accelBar', audio: 'audioBar', touch: 'touchBar', hammer: 'hammerBar' };
+    if (barMap[name]) this._updateSensorBar(barMap[name], conf, 1);
+  }
+
+  /* ── Fused output ─────────────────────────────────────────── */
   _onFused(g, conf) {
-    if (this.held || this.state === 'OFF' || this.state === 'ZEROING' ||
-        this.state === 'CALIBRATING') return;
+    if (!this.powered || this.held ||
+        ['OFF','ZEROING','CALIBRATING'].includes(this.state)) return;
 
     this.currentG = g;
     this._updateReadout(g);
 
-    // Stability detection
+    // Stability detection (rolling variance)
     this._stableBuf.push(g);
-    if (this._stableBuf.length > this.STABLE_SAMPLES) this._stableBuf.shift();
+    if (this._stableBuf.length > this.STABLE_WIN) this._stableBuf.shift();
 
     const variance = this._variance(this._stableBuf);
-    const pct      = Math.min(100, (1 / (1 + variance * 50)) * 100);
-    const stable   = variance < this.STABLE_THRESHOLD * 0.1 &&
-                     this._stableBuf.length === this.STABLE_SAMPLES;
+    const pct  = Math.min(100, (1 / (1 + variance * 80)) * 100);
+    const stable = variance < this.STABLE_THR ** 2 &&
+                   this._stableBuf.length === this.STABLE_WIN;
 
     this.stabBar.set(pct, stable);
+    document.getElementById('confLabel').textContent = `CONF: ${Math.round(conf * 100)}%`;
 
-    if (g > 0.09) {
+    if (g > 0.1) {
       this._setState(stable ? 'STABLE' : 'MEASURING');
     } else {
-      this._setState('READY');
+      if (this.state !== 'READY') this._setState('READY');
       this._stableBuf = [];
     }
   }
 
   _updateReadout(g) {
-    const unit = UNITS[this.unitIdx];
-    const converted = g * unit.factor;
-    const negative  = converted < 0;
-    this.display.setValue(converted, negative);
+    const u = UNITS[this.unitIdx];
+    this.display.setValue(g * u.factor);
   }
 
   _variance(arr) {
@@ -535,64 +636,65 @@ class PhonewayApp {
     return arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length;
   }
 
-  /* ── Sensor status UI ───────────────────────────────────────── */
-  _updateSensorUI(ax, ay, az) {
-    const accelBar = document.getElementById('accelBar');
-    if (accelBar) {
-      const mag = Math.sqrt(ax * ax + ay * ay) * 20; // scale for display
-      accelBar.style.width = Math.min(100, mag * 100) + '%';
-    }
+  /* ── Haptics ──────────────────────────────────────────────── */
+  _haptic(p) { if ('vibrate' in navigator) navigator.vibrate(p); }
 
-    const confEl = document.getElementById('confLabel');
-    if (confEl) {
-      const c = Math.round(this.fusion.fusedConfidence * 100);
-      confEl.textContent = `CONF: ${c}%`;
-    }
+  /* ── UI helpers ───────────────────────────────────────────── */
+  _updateSensorBar(id, val, max) {
+    const el = document.getElementById(id);
+    if (el) el.style.width = Math.min(100, (val / (max || 1)) * 100) + '%';
   }
 
-  /* ── Haptics ────────────────────────────────────────────────── */
-  _haptic(pattern) {
-    if ('vibrate' in navigator) navigator.vibrate(pattern);
+  _setCalProgress(pct) {
+    const el = document.getElementById('calProgress');
+    if (el) el.style.width = pct + '%';
   }
 
-  /* ── Utility ────────────────────────────────────────────────── */
-  async _showMessage(text) {
-    const el = document.getElementById('messageOverlay');
-    if (!el) return;
-    el.innerHTML = `<div class="msg-box"><pre>${text}</pre></div>`;
-    el.style.display = 'flex';
-    await delay(2200);
-    el.style.display = 'none';
+  async _showStepOverlay(title, body) {
+    const ov = document.getElementById('stepOverlay');
+    if (!ov) { await delay(2000); return; }
+    ov.querySelector('.step-title').textContent = title;
+    ov.querySelector('.step-body').textContent  = body;
+    ov.style.display = 'flex';
   }
 
-  _showToast(text, ms = 3000) {
+  _hideStepOverlay() {
+    const ov = document.getElementById('stepOverlay');
+    if (ov) ov.style.display = 'none';
+  }
+
+  _showToast(text, ms = 2500) {
     let t = document.getElementById('toast');
     if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
     t.textContent = text;
     t.className = 'toast toast-show';
-    setTimeout(() => { t.className = 'toast'; }, ms);
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.className = 'toast'; }, ms);
   }
 
-  /* ── Persistence ────────────────────────────────────────────── */
+  _showSurfaceTip() {
+    const sq  = this.motion.surfaceQuality;
+    const tip = SURFACE_TIPS[sq || 'unknown'];
+    if (tip) this._showToast(tip, 5000);
+  }
+
+  /* ── Persistence ──────────────────────────────────────────── */
   _loadSettings() {
-    try {
-      return JSON.parse(localStorage.getItem('phoneway') ?? '{}');
-    } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem('phoneway_v2') ?? '{}'); } catch { return {}; }
   }
 
   _saveSettings() {
-    try { localStorage.setItem('phoneway', JSON.stringify(this.settings)); } catch {}
+    try { localStorage.setItem('phoneway_v2', JSON.stringify(this.settings)); } catch {}
   }
 }
 
-/* ── Boot ──────────────────────────────────────────────────────── */
+/* ── Boot ──────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   const app = new PhonewayApp();
   window.__phoneway = app;
   app.boot().catch(console.error);
 
-  // Register service worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});
   }
 });
