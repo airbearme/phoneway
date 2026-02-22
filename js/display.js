@@ -195,4 +195,90 @@ class LED {
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-export { SevenSegmentDisplay, StabilityBar, LED, delay };
+/* ═══════════════════════════════════════════════════════════════
+   AccuracyDisplay  —  mini 7-segment readout for accuracy %
+   Updates in real-time, same segment rendering as main display,
+   with color-coded bar and flash animation on significant changes.
+═══════════════════════════════════════════════════════════════ */
+class AccuracyDisplay {
+  /**
+   * @param {HTMLElement} digitContainer  — .acc-seg-wrap element
+   * @param {HTMLElement} barEl           — .acc-bar-fill element
+   */
+  constructor(digitContainer, barEl) {
+    this.digitEl = digitContainer;
+    this.barEl   = barEl;
+    this._prev   = -1;
+    this._digits = 3;   // up to "100"
+    this._els    = [];
+    this._build();
+  }
+
+  _build() {
+    this.digitEl.innerHTML = '';
+    for (let i = 0; i < this._digits; i++) {
+      const wrap = document.createElement('div');
+      wrap.className = 'acc-digit seg-digit';
+      const segs = {};
+      for (const name of NAMES) {
+        const el = document.createElement('div');
+        el.className = `seg seg-${name} seg-off`;
+        segs[name] = el;
+        wrap.appendChild(el);
+      }
+      this._els.push({ segs });
+      this.digitEl.appendChild(wrap);
+    }
+  }
+
+  /**
+   * Set accuracy percentage (0–100). Animates digits in real-time.
+   * @param {number} pct
+   */
+  set(pct) {
+    const clamped = Math.min(100, Math.max(0, Math.round(pct)));
+
+    // Flash if change is significant (> 3%)
+    if (Math.abs(clamped - this._prev) >= 3 && this._prev >= 0) {
+      this.digitEl.classList.add('acc-flash');
+      setTimeout(() => this.digitEl.classList.remove('acc-flash'), 320);
+    }
+    this._prev = clamped;
+
+    // Render digits
+    const str = String(clamped).padStart(this._digits, ' ');
+    for (let i = 0; i < this._digits; i++) {
+      const ch  = str[i] ?? ' ';
+      const pat = SEG[ch] ?? SEG[' '];
+      const { segs } = this._els[i];
+      NAMES.forEach((name, idx) => {
+        segs[name].classList.toggle('seg-off',  !pat[idx]);
+        segs[name].classList.toggle('seg-on',   !!pat[idx]);
+      });
+    }
+
+    // Color-coded bar
+    if (this.barEl) {
+      this.barEl.style.width = clamped + '%';
+      this.barEl.className = 'acc-bar-fill ' + (
+        clamped >= 80 ? 'acc-high' :
+        clamped >= 60 ? 'acc-good' :
+        clamped >= 35 ? 'acc-mid'  : 'acc-low'
+      );
+    }
+  }
+
+  /** Startup flash matching main display */
+  async startup() {
+    this.set(88);
+    await delay(600);
+    this.set(0);
+    await delay(200);
+    this.set(88);
+    await delay(300);
+    this.set(0);
+    await delay(150);
+  }
+}
+
+export { SevenSegmentDisplay, StabilityBar, LED, AccuracyDisplay, delay };

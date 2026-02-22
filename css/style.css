@@ -76,11 +76,12 @@ html, body {
 /* ── Header ─────────────────────────────────────────────────── */
 #header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 16px 6px;
+  padding: 10px 14px 8px;
   border-bottom: 1px solid #2a2a2a;
   background: linear-gradient(180deg, #1a1a1a 0%, #111 100%);
+  gap: 8px;
 }
 
 .brand {
@@ -119,6 +120,139 @@ html, body {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ACCURACY DISPLAY  — top-right corner, real-time
+   Same aesthetic as main 7-seg display: dark background + neon glow
+══════════════════════════════════════════════════════════════ */
+#accuracyBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.acc-label {
+  font-family: var(--font-ui);
+  font-size: 6px;
+  letter-spacing: 3px;
+  color: #444;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+/* Mini display window — same look as main display */
+.acc-display {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--display-bg);
+  border: 1px solid #1a3a1a;
+  border-radius: 5px;
+  padding: 4px 7px 3px 6px;
+  box-shadow:
+    inset 0 0 12px rgba(0,20,0,.9),
+    0 0 10px rgba(57,255,20,.04);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scanlines on acc display */
+.acc-display::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,.2) 2px, rgba(0,0,0,.2) 4px
+  );
+  pointer-events: none;
+}
+
+/* Wrapper for the 3 mini 7-seg digits */
+.acc-seg-wrap {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+/* Smaller segment digits for accuracy display */
+.acc-digit {
+  position: relative;
+  width: 18px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+/* Reuse .seg classes but smaller inside acc-digit */
+.acc-digit .seg-a, .acc-digit .seg-d, .acc-digit .seg-g {
+  left: 2px; right: 2px; height: 3px;
+}
+.acc-digit .seg-a { top: 0; }
+.acc-digit .seg-g { top: calc(50% - 1.5px); }
+.acc-digit .seg-d { bottom: 0; }
+
+.acc-digit .seg-f, .acc-digit .seg-b,
+.acc-digit .seg-e, .acc-digit .seg-c {
+  top: 3px; width: 3px;
+  height: calc(50% - 5px);
+}
+.acc-digit .seg-b { right: 0; top: 3px; }
+.acc-digit .seg-f { left:  0; top: 3px; }
+.acc-digit .seg-e { left:  0; top: calc(50% + 1px); }
+.acc-digit .seg-c { right: 0; top: calc(50% + 1px); }
+
+/* Percent sign */
+.acc-pct-sign {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--seg-on);
+  text-shadow: 0 0 6px var(--seg-on), 0 0 14px var(--seg-glow);
+  line-height: 1;
+  margin-left: 1px;
+}
+
+/* Thin accuracy bar below the mini display */
+.acc-bar-wrap {
+  width: 100%;
+  height: 3px;
+  background: #0a0a0a;
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid #1a1a1a;
+}
+
+.acc-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  transition: width 0.25s ease, background 0.4s ease;
+  /* Color shifts: red → orange → yellow → green as accuracy improves */
+  background: #ff2020;
+  box-shadow: 0 0 4px currentColor;
+}
+
+/* Color states driven by JS class */
+.acc-bar-fill.acc-low    { background: #ff2020; box-shadow: 0 0 4px #ff2020; }
+.acc-bar-fill.acc-mid    { background: #ff8c00; box-shadow: 0 0 4px #ff8c00; }
+.acc-bar-fill.acc-good   { background: #e8c84a; box-shadow: 0 0 4px #e8c84a; }
+.acc-bar-fill.acc-high   { background: var(--seg-on); box-shadow: 0 0 6px var(--seg-on); }
+
+/* Flash when accuracy changes significantly */
+@keyframes accFlash {
+  0%   { opacity: 1; }
+  25%  { opacity: 0.4; }
+  50%  { opacity: 1; }
+  75%  { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+.acc-flash { animation: accFlash 0.3s ease; }
+
+/* Adjust header layout to accommodate accuracy block */
+#header {
+  align-items: flex-start !important;
 }
 
 /* ── LEDs ───────────────────────────────────────────────────── */

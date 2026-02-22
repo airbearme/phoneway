@@ -26,10 +26,22 @@
       <div class="brand-name">PHONEWAY</div>
       <div class="brand-sub">PRECISION DIGITAL SCALE · SENSOR FUSION</div>
     </div>
-    <div class="header-leds">
-      <div class="led-group"><span class="led-lbl">PWR</span><div class="led led-off" id="ledPower"></div></div>
-      <div class="led-group"><span class="led-lbl">STB</span><div class="led led-off" id="ledStable"></div></div>
-      <div class="led-group"><span class="led-lbl">MIC</span><div class="led led-off" id="ledAudio"></div></div>
+
+    <!-- ── Real-time Accuracy Display (top-right) ──────────── -->
+    <div id="accuracyBlock">
+      <div class="acc-label">ACCURACY</div>
+      <div class="acc-display">
+        <div id="accDigits" class="acc-seg-wrap"></div>
+        <div class="acc-pct-sign">%</div>
+      </div>
+      <div class="acc-bar-wrap">
+        <div class="acc-bar-fill" id="accBar"></div>
+      </div>
+      <div class="header-leds" style="margin-top:4px">
+        <div class="led-group"><span class="led-lbl">PWR</span><div class="led led-off" id="ledPower"></div></div>
+        <div class="led-group"><span class="led-lbl">STB</span><div class="led led-off" id="ledStable"></div></div>
+        <div class="led-group"><span class="led-lbl">MIC</span><div class="led led-off" id="ledAudio"></div></div>
+      </div>
     </div>
   </div>
 
@@ -53,7 +65,7 @@
   <div id="status-bar">
     <span id="statusText">IDLE</span>
     <span id="modeLabel">FUSION</span>
-    <span id="confLabel">CONF: 0%</span>
+    <span id="surfaceLabel">SURFACE: —</span>
   </div>
 
   <!-- ── Surface / Touch Pad ────────────────────────────────── -->

@@ -29,7 +29,7 @@ import { BaselineRecorder, MotionSensor, TouchSensor, BayesianFusion }
 import { AudioAnalyzer }         from './audio.js';
 import { VibrationHammer }       from './vibrationHammer.js';
 import { GenericSensorManager }  from './genericSensors.js';
-import { SevenSegmentDisplay, StabilityBar, LED, delay } from './display.js';
+import { SevenSegmentDisplay, StabilityBar, LED, AccuracyDisplay, delay } from './display.js';
 
 /* ── Known calibration weights ────────────────────────────── */
 export const CAL_WEIGHTS = [
@@ -102,6 +102,10 @@ class PhonewayApp {
     this.STABLE_WIN = 30;
     this.STABLE_THR = 0.15;  // g variance below which = stable
 
+    // Accuracy tracking
+    this.accuracyDisplay = null;
+    this._lastAccPct     = 0;
+
     // Settings persistence
     this.settings = this._loadSettings();
   }
@@ -112,7 +116,17 @@ class PhonewayApp {
     this._initDisplay();
     this._initSensorBars();
 
-    await this.display.startup();
+    // Boot accuracy display simultaneously with main display
+    const accDigitEl = document.getElementById('accDigits');
+    const accBarEl   = document.getElementById('accBar');
+    if (accDigitEl && accBarEl) {
+      this.accuracyDisplay = new AccuracyDisplay(accDigitEl, accBarEl);
+    }
+
+    await Promise.all([
+      this.display.startup(),
+      this.accuracyDisplay?.startup(),
+    ]);
     this.ledPower.on('green');
 
     // Register all fusion sources with prior reliability weights
@@ -224,6 +238,13 @@ class PhonewayApp {
       case 'READY':
         this.display.setValue(0);
         this.ledStable.on('green');
+        // Show calibration-based baseline accuracy when at rest
+        if (this.accuracyDisplay) {
+          const cal  = this.settings.calibrated ? 1.0 : 0.4;
+          const surf = { excellent: 1.0, good: 0.8, ok: 0.55, poor: 0.3, unknown: 0.5 };
+          const base = Math.round((cal * 0.65 + (surf[this.settings.surfaceQuality ?? 'unknown'] ?? 0.5) * 0.35) * 75);
+          this.accuracyDisplay.set(Math.min(75, base));
+        }
         break;
       case 'MEASURING':
         this.ledStable.on('orange');
@@ -605,23 +626,57 @@ class PhonewayApp {
     this.currentG = g;
     this._updateReadout(g);
 
-    // Stability detection (rolling variance)
+    // ── Stability detection (rolling variance) ─────────────────
     this._stableBuf.push(g);
     if (this._stableBuf.length > this.STABLE_WIN) this._stableBuf.shift();
 
     const variance = this._variance(this._stableBuf);
-    const pct  = Math.min(100, (1 / (1 + variance * 80)) * 100);
+    const stabilityScore = 1 / (1 + variance * 120);   // 0–1
     const stable = variance < this.STABLE_THR ** 2 &&
                    this._stableBuf.length === this.STABLE_WIN;
 
-    this.stabBar.set(pct, stable);
-    document.getElementById('confLabel').textContent = `CONF: ${Math.round(conf * 100)}%`;
+    const stabPct = Math.min(100, stabilityScore * 100);
+    this.stabBar.set(stabPct, stable);
+
+    // ── Real-time accuracy % ───────────────────────────────────
+    // Composite of:
+    //   40% sensor fusion confidence (how much sensors agree)
+    //   35% reading stability        (low variance = more accurate)
+    //   15% calibration status       (calibrated vs guessed)
+    //   10% surface quality          (softer surface = better deflection)
+    const calScore = this.settings.calibrated ? 1.0 : 0.4;
+    const surfMap  = { excellent: 1.0, good: 0.8, ok: 0.55, poor: 0.3, unknown: 0.5 };
+    const surfScore = surfMap[this.settings.surfaceQuality ?? 'unknown'];
+
+    const rawAccuracy =
+      conf           * 0.40 +
+      stabilityScore * 0.35 +
+      calScore       * 0.15 +
+      surfScore      * 0.10;
+
+    // Clamp, round to nearest integer, update display
+    const accPct = Math.min(100, Math.max(0, Math.round(rawAccuracy * 100)));
+
+    if (this.accuracyDisplay) {
+      this.accuracyDisplay.set(accPct);
+    }
+    this._lastAccPct = accPct;
+
+    // Also update surface quality label in status bar
+    const sq = this.settings.surfaceQuality;
+    const surfEl = document.getElementById('surfaceLabel');
+    if (surfEl && sq) surfEl.textContent = `SURFACE: ${sq.toUpperCase()}`;
 
     if (g > 0.1) {
       this._setState(stable ? 'STABLE' : 'MEASURING');
     } else {
       if (this.state !== 'READY') this._setState('READY');
       this._stableBuf = [];
+      // Show accuracy even at rest (sensor health)
+      if (this.accuracyDisplay) {
+        const restPct = Math.round(calScore * 60 + surfScore * 20 + conf * 20);
+        this.accuracyDisplay.set(Math.min(99, restPct));
+      }
     }
   }
 
