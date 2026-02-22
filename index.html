@@ -194,6 +194,22 @@
 
     <!-- Bottom row -->
     <div class="btn-row-3">
+      <!-- VERIFY — known-weight accuracy check (green skull) -->
+      <button class="btn btn-verify" id="btnVerify" aria-label="Verify against known weight">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#001a00" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#39ff14"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#39ff14"/>
+          <ellipse cx="30" cy="33" rx="3" ry="2" fill="#001a00" opacity=".6"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#39ff14" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#39ff14" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#39ff14" opacity=".7"/>
+          <!-- Checkmark detail -->
+          <path d="M20 25 L26 31 L38 19" stroke="#39ff14" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/>
+        </svg>
+        <div class="btn-label">VERIFY</div>
+      </button>
+
       <!-- HAMMER — vibration exciter -->
       <button class="btn btn-hammer" id="btnHammer" aria-label="Vibration hammer measure">
         <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
@@ -315,6 +331,70 @@
       <button class="modal-btn modal-btn-secondary" id="calCancelBtn">CANCEL</button>
     </div>
   </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     REFERENCE WEIGHT VERIFY PANEL (slide-up drawer)
+════════════════════════════════════════════════════════════ -->
+<div id="verifyPanel" class="verify-panel" style="display:none">
+
+  <!-- Header -->
+  <div class="verify-header">
+    <div>
+      <div class="verify-title">VERIFY ACCURACY</div>
+      <div class="verify-sub">MEASURE AGAINST KNOWN WEIGHT</div>
+    </div>
+    <button class="verify-close" id="verifyClose">×</button>
+  </div>
+
+  <!-- Reference weight chips — built by JS -->
+  <div class="verify-chips" id="verifyChips"></div>
+
+  <!-- Live comparison readout -->
+  <div class="verify-readout">
+    <div class="verify-tip" id="verifyTip">← SELECT A REFERENCE WEIGHT ABOVE</div>
+
+    <div class="verify-stats" id="verifyStats" style="display:none">
+      <div class="vstat-row">
+        <span class="vstat-label">EXPECTED</span>
+        <span class="vstat-value" id="vExpected">—</span>
+        <span class="vstat-unit">g</span>
+      </div>
+      <div class="vstat-row">
+        <span class="vstat-label">MEASURED</span>
+        <span class="vstat-value" id="vMeasured">—</span>
+        <span class="vstat-unit">g</span>
+      </div>
+      <div class="vstat-row">
+        <span class="vstat-label">ERROR</span>
+        <span class="vstat-value vstat-small" id="vError">—</span>
+        <span class="vstat-unit" id="vTol"></span>
+      </div>
+      <div class="vstat-row">
+        <span class="vstat-label">RESULT</span>
+        <span class="vstat-pass" id="vPass">···</span>
+      </div>
+    </div>
+
+    <!-- Match accuracy bar -->
+    <div class="verify-acc-bar-wrap" id="vAccBarWrap" style="display:none">
+      <div class="verify-acc-label">
+        <span>MATCH ACCURACY</span>
+        <span id="vAccPct">—%</span>
+      </div>
+      <div class="verify-acc-track">
+        <div class="verify-acc-fill" id="vAccFill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="verify-btns">
+    <button class="modal-btn modal-btn-primary" id="verifyLockBtn" style="display:none">⭐ LOCK AS REF</button>
+    <button class="modal-btn modal-btn-secondary" id="verifyCloseBtn">CLOSE</button>
+  </div>
+
 </div>
 
 

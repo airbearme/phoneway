@@ -30,6 +30,7 @@ import { AudioAnalyzer }         from './audio.js';
 import { VibrationHammer }       from './vibrationHammer.js';
 import { GenericSensorManager }  from './genericSensors.js';
 import { SevenSegmentDisplay, StabilityBar, LED, AccuracyDisplay, delay } from './display.js';
+import { REF_WEIGHTS, ReferenceWeightVerifier } from './referenceWeights.js';
 
 /* ── Known calibration weights ────────────────────────────── */
 export const CAL_WEIGHTS = [
@@ -106,6 +107,12 @@ class PhonewayApp {
     this.accuracyDisplay = null;
     this._lastAccPct     = 0;
 
+    // Reference weight verification
+    this.verifier        = new ReferenceWeightVerifier();
+    this.verifyOpen      = false;
+    this._activeRefW     = null;
+    this._lastVerifyPass = false;
+
     // Settings persistence
     this.settings = this._loadSettings();
   }
@@ -177,6 +184,10 @@ class PhonewayApp {
       return;
     }
 
+    // Load persisted reference weight
+    this.verifier.loadSaved();
+    this.verifier.loadHistory();
+
     if (this.settings.calibrated) {
       this.motion.sensitivity = this.settings.motionSensitivity;
       this.motion.baseline    = this.settings.motionBaseline;
@@ -194,14 +205,18 @@ class PhonewayApp {
   /* ── UI Binding ───────────────────────────────────────────── */
   _bindUI() {
     const b = (id, fn) => document.getElementById(id)?.addEventListener('click', fn);
-    b('btnTare',   () => this._tare());
-    b('btnMode',   () => this._cycleMode());
-    b('btnUnits',  () => this._cycleUnits());
-    b('btnCal',    () => this._triggerCal());
-    b('btnHold',   () => this._toggleHold());
-    b('btnPower',  () => this._togglePower());
-    b('btnLight',  () => this._toggleLight());
-    b('btnHammer', () => this._runHammerMeasure());
+    b('btnTare',       () => this._tare());
+    b('btnMode',       () => this._cycleMode());
+    b('btnUnits',      () => this._cycleUnits());
+    b('btnCal',        () => this._triggerCal());
+    b('btnHold',       () => this._toggleHold());
+    b('btnPower',      () => this._togglePower());
+    b('btnLight',      () => this._toggleLight());
+    b('btnHammer',     () => this._runHammerMeasure());
+    b('btnVerify',     () => this._openVerifyPanel());
+    b('verifyClose',   () => this._closeVerifyPanel());
+    b('verifyCloseBtn',() => this._closeVerifyPanel());
+    b('verifyLockBtn', () => this._lockVerifyRef());
 
     // Touch pad for contact-pressure weighing
     const pad = document.getElementById('touchPad');
@@ -545,6 +560,169 @@ class PhonewayApp {
     }
   }
 
+  /* ── Reference Weight Verify Panel ───────────────────────── */
+  _openVerifyPanel() {
+    if (!this.powered) return;
+    this._haptic([8]);
+    const panel = document.getElementById('verifyPanel');
+    if (!panel) return;
+
+    // Mark button active
+    document.getElementById('btnVerify')?.classList.add('btn-active');
+
+    // Sync saved grams into the REF_WEIGHTS array for the chip
+    const saved = this.verifier.savedGrams;
+    const savedEntry = REF_WEIGHTS.find(r => r.isSaved);
+    if (savedEntry && saved) savedEntry.grams = saved;
+
+    this.verifyOpen = true;
+    this._buildVerifyChips();
+    panel.style.display = 'block';
+    this._haptic([15, 10, 15]);
+  }
+
+  _closeVerifyPanel() {
+    const panel = document.getElementById('verifyPanel');
+    if (panel) panel.style.display = 'none';
+
+    document.getElementById('btnVerify')?.classList.remove('btn-active');
+
+    this.verifyOpen  = false;
+    this._activeRefW = null;
+    this.verifier.stop();
+
+    // Reset readout UI
+    const stats   = document.getElementById('verifyStats');
+    const accWrap = document.getElementById('vAccBarWrap');
+    const tip     = document.getElementById('verifyTip');
+    const lock    = document.getElementById('verifyLockBtn');
+    if (stats)   stats.style.display   = 'none';
+    if (accWrap) accWrap.style.display  = 'none';
+    if (tip)     tip.style.display      = 'block';
+    if (lock)    lock.style.display     = 'none';
+
+    // Deselect chips
+    document.querySelectorAll('.verify-chip').forEach(c => c.classList.remove('selected'));
+  }
+
+  _buildVerifyChips() {
+    const container = document.getElementById('verifyChips');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const saved = this.verifier.savedGrams;
+
+    REF_WEIGHTS.forEach(refW => {
+      // Hide "Saved Reference" chip if no weight has been locked yet
+      if (refW.isSaved && !saved) return;
+
+      const chip = document.createElement('div');
+      chip.className = 'verify-chip';
+      chip.dataset.id = refW.id;
+
+      const gramsLabel = refW.isSaved
+        ? (saved ? saved.toFixed(2) + 'g' : '—')
+        : (refW.grams != null ? refW.grams.toFixed(2) + 'g' : '?');
+
+      chip.innerHTML = `
+        <div class="verify-chip-icon">${refW.icon}</div>
+        <div class="verify-chip-grams">${gramsLabel}</div>
+        <div class="verify-chip-label">${refW.label}</div>`;
+
+      chip.addEventListener('click', () => {
+        container.querySelectorAll('.verify-chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        const rw = refW.isSaved ? { ...refW, grams: saved } : refW;
+        this._selectVerifyWeight(rw);
+      });
+
+      container.appendChild(chip);
+    });
+  }
+
+  _selectVerifyWeight(refW) {
+    if (!refW || refW.grams == null) {
+      this._showToast('No saved reference. Use LOCK to save one first.', 2500);
+      return;
+    }
+    this._activeRefW = refW;
+    this.verifier.start(refW);
+
+    // Show stats + accuracy bar
+    document.getElementById('verifyTip').style.display   = 'none';
+    document.getElementById('verifyStats').style.display  = 'flex';
+    document.getElementById('vAccBarWrap').style.display  = 'block';
+    document.getElementById('verifyLockBtn').style.display = 'block';
+
+    // Populate expected / tolerance
+    document.getElementById('vExpected').textContent = refW.grams.toFixed(3);
+    document.getElementById('vTol').textContent      = `±${(refW.tolerance ?? 0.05).toFixed(3)}g`;
+    document.getElementById('vMeasured').textContent  = '---';
+    document.getElementById('vError').textContent     = '---';
+    document.getElementById('vPass').textContent      = '···';
+    document.getElementById('vPass').className        = 'vstat-pass';
+    document.getElementById('vAccPct').textContent    = '—%';
+    document.getElementById('vAccFill').style.width   = '0%';
+
+    this._haptic([10]);
+    this._showToast(`Place ${refW.label} (${refW.grams.toFixed(2)}g) on phone`, 3500);
+  }
+
+  _updateVerifyReadout({ measured, error, accuracy, pass }) {
+    const mEl = document.getElementById('vMeasured');
+    const eEl = document.getElementById('vError');
+    const pEl = document.getElementById('vPass');
+    const aEl = document.getElementById('vAccPct');
+    const fEl = document.getElementById('vAccFill');
+
+    if (mEl) mEl.textContent = measured.toFixed(3);
+    if (eEl) eEl.textContent = (error >= 0 ? '+' : '') + error.toFixed(3);
+
+    if (pEl) {
+      pEl.textContent = pass ? '✓  PASS' : '✗  FAIL';
+      pEl.className   = 'vstat-pass ' + (pass ? 'pass' : 'fail');
+    }
+
+    const pct = Math.round(accuracy);
+    if (aEl) aEl.textContent = pct + '%';
+    if (fEl) {
+      fEl.style.width = pct + '%';
+      fEl.style.background =
+        pct >= 95 ? 'var(--seg-on)' :
+        pct >= 80 ? '#e8c84a' :
+        pct >= 60 ? '#ff8c00' : '#ff2020';
+      fEl.style.boxShadow = `0 0 6px ${fEl.style.background}`;
+    }
+
+    // Haptic pulse on first PASS
+    if (pass && !this._lastVerifyPass) this._haptic([20, 15, 60]);
+    this._lastVerifyPass = pass;
+  }
+
+  _lockVerifyRef() {
+    const g = this.currentG;
+    if (g <= 0) {
+      this._showToast('Nothing on scale to lock.', 2000);
+      return;
+    }
+    this.verifier.lock(g);
+    this._haptic([20, 15, 100]);
+    this._showToast(`⭐ Locked ${g.toFixed(3)}g as reference`, 2500);
+
+    // Persist into saved chip
+    const savedEntry = REF_WEIGHTS.find(r => r.isSaved);
+    if (savedEntry) savedEntry.grams = g;
+
+    // Rebuild chip list so saved chip appears / updates
+    this._buildVerifyChips();
+
+    const lockBtn = document.getElementById('verifyLockBtn');
+    if (lockBtn) {
+      lockBtn.textContent = '⭐ LOCKED!';
+      setTimeout(() => { if (lockBtn) lockBtn.textContent = '⭐ LOCK AS REF'; }, 2000);
+    }
+  }
+
   /* ── Tare ─────────────────────────────────────────────────── */
   async _tare() {
     if (!this.powered) return;
@@ -677,6 +855,12 @@ class PhonewayApp {
         const restPct = Math.round(calScore * 60 + surfScore * 20 + conf * 20);
         this.accuracyDisplay.set(Math.min(99, restPct));
       }
+    }
+
+    // Feed verifier if panel is open and a reference is selected
+    if (this.verifyOpen && this.verifier.active) {
+      const vResult = this.verifier.feed(g);
+      if (vResult) this._updateVerifyReadout(vResult);
     }
   }
 

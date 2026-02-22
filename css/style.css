@@ -928,7 +928,7 @@ html, body {
 
 .btn-row-3 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 6px;
 }
@@ -1097,6 +1097,256 @@ html, body {
 @media (max-height: 600px) {
   #touch-section { display: none; }
 }
+
+/* ── VERIFY skull button (neon green) ──────────────────────── */
+.btn-verify {
+  background: linear-gradient(135deg, #002200 0%, #005500 40%, #00cc00 50%, #005500 60%, #001a00 100%);
+  box-shadow: 0 2px 8px rgba(0,180,0,.7), 0 0 20px rgba(0,180,0,.3), inset 0 1px 1px rgba(255,255,255,.2);
+}
+.btn-verify .btn-label { color: #afffaf; }
+.btn-verify .eye-left, .btn-verify .eye-right { fill: var(--seg-on) !important; }
+.btn-verify.btn-active {
+  box-shadow: 0 0 18px var(--seg-on), 0 0 36px rgba(57,255,20,.4), inset 0 2px 6px rgba(0,0,0,.7);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   REFERENCE WEIGHT VERIFY PANEL — slide-up drawer
+═══════════════════════════════════════════════════════════════ */
+.verify-panel {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  background: linear-gradient(180deg, #0c0c0c 0%, #111 100%);
+  border-top: 2px solid var(--seg-on);
+  border-left: 1px solid #1a3a1a;
+  border-right: 1px solid #1a3a1a;
+  box-shadow: 0 -6px 30px rgba(57,255,20,.12), 0 0 80px rgba(0,0,0,.95);
+  z-index: 200;
+  padding: 14px 16px 18px;
+  max-height: 72dvh;
+  overflow-y: auto;
+}
+
+/* Header */
+.verify-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.verify-title {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 3px rgba(201,162,39,.5));
+}
+
+.verify-sub {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: #555;
+  margin-top: 2px;
+}
+
+.verify-close {
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  color: #555;
+  font-size: 20px;
+  line-height: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition: border-color .15s, color .15s;
+}
+.verify-close:hover { border-color: #555; color: #aaa; }
+
+/* Reference weight chips */
+.verify-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.verify-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 8px 6px;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+  min-width: 52px;
+}
+.verify-chip:hover    { background: #1e1e1e; border-color: #444; }
+.verify-chip.selected {
+  background: #041a04;
+  border-color: var(--seg-on);
+  box-shadow: 0 0 10px rgba(57,255,20,.22);
+}
+
+.verify-chip-icon  { font-size: 16px; line-height: 1; }
+.verify-chip-grams {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--seg-on);
+  text-shadow: 0 0 4px var(--seg-on);
+  letter-spacing: 0.5px;
+}
+.verify-chip-label {
+  font-size: 6px;
+  letter-spacing: 0.5px;
+  color: #666;
+  text-align: center;
+  max-width: 56px;
+  line-height: 1.3;
+}
+
+/* Live comparison readout */
+.verify-readout {
+  background: var(--display-bg);
+  border: 1px solid #1a3a1a;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scanlines on readout */
+.verify-readout::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,.12) 2px, rgba(0,0,0,.12) 4px
+  );
+  pointer-events: none;
+}
+
+.verify-tip {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: #333;
+  text-align: center;
+}
+
+/* Stats rows */
+.verify-stats { display: flex; flex-direction: column; gap: 5px; }
+
+.vstat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.vstat-label {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: #444;
+  min-width: 68px;
+}
+
+.vstat-value {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--seg-on);
+  text-shadow: 0 0 8px var(--seg-on), 0 0 18px var(--seg-glow);
+  flex: 1;
+  text-align: right;
+  letter-spacing: 1px;
+}
+
+.vstat-small { font-size: 14px; }
+
+.vstat-unit {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--gold);
+  min-width: 48px;
+  letter-spacing: 0.5px;
+}
+
+.vstat-pass {
+  font-family: var(--font-display);
+  font-size: 13px;
+  flex: 1;
+  text-align: right;
+  letter-spacing: 3px;
+  color: #444;
+}
+.vstat-pass.pass {
+  color: var(--seg-on);
+  text-shadow: 0 0 10px var(--seg-on), 0 0 20px var(--seg-glow);
+}
+.vstat-pass.fail {
+  color: #ff2020;
+  text-shadow: 0 0 10px #ff2020;
+}
+
+/* Match accuracy bar */
+.verify-acc-bar-wrap { margin-top: 12px; }
+
+.verify-acc-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: #444;
+  margin-bottom: 4px;
+}
+
+#vAccPct {
+  color: var(--seg-on);
+  text-shadow: 0 0 4px var(--seg-on);
+}
+
+.verify-acc-track {
+  height: 6px;
+  background: #0a0a0a;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid #1a1a1a;
+}
+
+.verify-acc-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--seg-on);
+  border-radius: 3px;
+  transition: width .25s ease, background .3s;
+  box-shadow: 0 0 6px var(--seg-on);
+}
+
+/* Action buttons */
+.verify-btns {
+  display: flex;
+  gap: 8px;
+}
+.verify-btns .modal-btn { flex: 1; }
 
 /* ── Scrollbar (for modals) ─────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
