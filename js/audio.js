@@ -180,6 +180,7 @@ class AudioAnalyzer {
         const ratio    = this.baselineFreq / filtFreq;
         const rawG     = Math.max(0, this.phoneMass * (ratio * ratio - 1));
         this.weightG   = this.mavg.update(rawG);
+        this.lastFreq  = filtFreq;   // expose for camera cross-validation
         this.confidence = Math.min(1, peak.snr / 30);
         this.onWeight?.(this.weightG, this.confidence);
       }

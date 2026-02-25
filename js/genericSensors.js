@@ -20,7 +20,8 @@
 
 'use strict';
 
-import { AdaptiveKalmanFilter, KalmanFilter2D, MovingAverageFilter } from './kalman.js';
+import { AdaptiveKalmanFilter, KalmanFilter2D, MovingAverageFilter,
+         ComplementaryFilter } from './kalman.js';
 
 class GenericSensorManager {
   constructor() {
@@ -51,8 +52,16 @@ class GenericSensorManager {
     this._magKl = new AdaptiveKalmanFilter({ R: 2, Q: 0.1 });
     this._magMavg = new MovingAverageFilter(20);
 
-    this.onLinAccel = null;    // callback(ax, ay, az)
+    this.onLinAccel   = null;  // callback(ax, ay, az)
     this.onMagAnomaly = null;  // callback(deltaB_nT, confidence)
+    this.onGyroMass   = null;  // callback(grams, confidence)
+
+    // Complementary filter — gyro + gravity for tilt-based mass estimation
+    this._compX = new ComplementaryFilter(0.96);
+    this._compY = new ComplementaryFilter(0.96);
+    this._tiltBuf      = [];     // rolling tilt magnitude samples
+    this._tiltBaseline = null;   // tilt at rest (no object)
+    this._gyroCalibration = null;// g per radian of tilt delta
   }
 
   /** Request all permissions and start all available sensors */
@@ -117,6 +126,7 @@ class GenericSensorManager {
         this.gyroX = s.x ?? 0;
         this.gyroY = s.y ?? 0;
         this.gyroZ = s.z ?? 0;
+        this._updateGyroDerived(performance.now());
       });
       s.addEventListener('error', () => {});
       s.start();
@@ -152,6 +162,61 @@ class GenericSensorManager {
       this.magnetometer = s;
       this.available.mag = true;
     } catch {}
+  }
+
+  /**
+   * Complementary-filter tilt → mass estimation.
+   * Runs on every gyroscope reading (200 Hz on Android Chrome).
+   * Fuses gyro angular velocity with gravity sensor absolute tilt.
+   */
+  _updateGyroDerived(ts) {
+    if (!this.available.gyro || !this.available.gravity) return;
+
+    // Absolute tilt angles from gravity sensor (rad)
+    const gMag       = Math.sqrt(this.gravX ** 2 + this.gravY ** 2 + this.gravZ ** 2) || 9.81;
+    const accelAngX  = Math.atan2(this.gravY,  this.gravZ);
+    const accelAngY  = Math.atan2(-this.gravX, this.gravZ);
+
+    // Fused tilt via complementary filter
+    const tiltX = this._compX.update(this.gyroX, accelAngX, ts);
+    const tiltY = this._compY.update(this.gyroY, accelAngY, ts);
+    const tilt  = Math.sqrt(tiltX * tiltX + tiltY * tiltY);
+
+    this._tiltBuf.push(tilt);
+    if (this._tiltBuf.length > 40) this._tiltBuf.shift();
+
+    if (this._tiltBaseline === null || !this._gyroCalibration || this._tiltBuf.length < 15) return;
+
+    const n       = this._tiltBuf.length;
+    const avg     = this._tiltBuf.reduce((a, b) => a + b, 0) / n;
+    const deltaTilt = Math.max(0, avg - this._tiltBaseline);
+    const massG   = deltaTilt * this._gyroCalibration;
+
+    if (massG < 0 || massG > 500) return;
+
+    // Confidence from reading stability (low variance → high conf)
+    const vari = this._tiltBuf.reduce((a, t) => a + (t - avg) ** 2, 0) / n;
+    const conf = Math.min(0.75, 1 / (1 + Math.sqrt(vari) * 150));
+    if (conf > 0.25) this.onGyroMass?.(massG, conf);
+  }
+
+  /** Record current tilt as the "no object" baseline. */
+  recordTiltBaseline() {
+    if (this._tiltBuf.length < 10) return;
+    this._tiltBaseline = this._tiltBuf.reduce((a, b) => a + b, 0) / this._tiltBuf.length;
+    this._compX.reset();
+    this._compY.reset();
+    this._tiltBuf = [];
+  }
+
+  /**
+   * Set gyroscope sensitivity for mass estimation.
+   * @param {number} motionSensitivity  g per m/s² from MotionSensor calibration
+   */
+  setGyroCalibration(motionSensitivity) {
+    // tilt (rad) → horizontal acceleration: a = g·sin(θ) ≈ g·θ
+    // mass = a · sensitivity = θ · g · sensitivity
+    this._gyroCalibration = (motionSensitivity || 0) * 9.81;
   }
 
   /** Record baseline magnetic field (phone empty, stable) */

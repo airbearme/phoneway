@@ -31,6 +31,7 @@ import { VibrationHammer }       from './vibrationHammer.js';
 import { GenericSensorManager }  from './genericSensors.js';
 import { SevenSegmentDisplay, StabilityBar, LED, AccuracyDisplay, delay } from './display.js';
 import { REF_WEIGHTS, ReferenceWeightVerifier } from './referenceWeights.js';
+import { CameraSensor } from './cameraSensor.js';
 
 /* ── Known calibration weights ────────────────────────────── */
 export const CAL_WEIGHTS = [
@@ -54,7 +55,7 @@ const UNITS = [
   { key: 'dwt', label: 'dwt', factor: 0.643015,  places: 3 },
 ];
 
-const MODES  = ['FUSION', 'ACCEL', 'AUDIO', 'HAMMER', 'TOUCH'];
+const MODES  = ['FUSION', 'ACCEL', 'AUDIO', 'HAMMER', 'TOUCH', 'GYRO', 'CAM'];
 
 const SURFACE_TIPS = {
   poor:      '⚠ Hard surface — move to notebook or mouse-pad for best accuracy',
@@ -82,15 +83,17 @@ class PhonewayApp {
     this.audio     = new AudioAnalyzer();
     this.hammer    = new VibrationHammer();
     this.genSensor = new GenericSensorManager();
+    this.camera    = new CameraSensor();
     this.baseline  = new BaselineRecorder(200);
     this.fusion    = new BayesianFusion();
 
     // Display refs
-    this.display   = null;
-    this.stabBar   = null;
-    this.ledPower  = null;
-    this.ledStable = null;
-    this.ledAudio  = null;
+    this.display    = null;
+    this.stabBar    = null;
+    this.ledPower   = null;
+    this.ledStable  = null;
+    this.ledAudio   = null;
+    this.ledCamera  = null;
 
     // Calibration
     this.calPhase  = 0;   // 0=not done, 1=first weight done, 2=complete
@@ -137,15 +140,23 @@ class PhonewayApp {
     this.ledPower.on('green');
 
     // Register all fusion sources with prior reliability weights
-    this.fusion.register('accel',  1.0);   // primary
-    this.fusion.register('hammer', 0.9);   // almost as good
-    this.fusion.register('audio',  0.8);   // good when calibrated
-    this.fusion.register('touch',  0.35);  // coarse
-    this.fusion.register('mag',    0.3);   // metal objects only
+    this.fusion.register('accel',  1.0);   // primary accelerometer
+    this.fusion.register('hammer', 0.9);   // vibration resonance
+    this.fusion.register('audio',  0.8);   // mic FFT resonance
+    this.fusion.register('gyro',   0.75);  // complementary-filter tilt
+    this.fusion.register('cam',    0.60);  // camera optical-flow resonance
+    this.fusion.register('touch',  0.35);  // coarse pressure
+    this.fusion.register('mag',    0.30);  // ferromagnetic only
 
     // Wire fusion callbacks
     this.motion.onWeight  = (g, c) => this._sensorUpdate('accel',  g, c);
-    this.audio.onWeight   = (g, c) => this._sensorUpdate('audio',  g, c);
+    this.audio.onWeight   = (g, c) => {
+      this._sensorUpdate('audio', g, c);
+      // Audio+Camera sonar: pass loaded frequency to camera for cross-validation
+      if (this.audio.lastFreq && this.camera.active) {
+        this.camera.validateWithAudio(this.audio.lastFreq);
+      }
+    };
     this.touch.onWeight   = (g, c) => this._sensorUpdate('touch',  g, c);
     this.hammer.onWeight  = (g, c) => this._sensorUpdate('hammer', g, c);
 
@@ -156,23 +167,31 @@ class PhonewayApp {
 
     this.fusion.onFused = (g, c) => this._onFused(g, c);
 
-    // Generic Sensor API (mag anomaly → fusion)
+    // Generic Sensor API callbacks
     this.genSensor.onMagAnomaly = (delta, conf) => {
-      // Convert magnetic anomaly to rough mass estimate
       // ~1 µT per gram for ferromagnetic objects (very rough)
       const roughG = Math.abs(delta) * 0.8;
       this._sensorUpdate('mag', roughG, conf * 0.3);
     };
 
     this.genSensor.onLinAccel = (lax, lay) => {
-      // Higher-quality linear acceleration from Generic Sensor API
-      // Inject into motion sensor's pipeline (bypasses DeviceMotion baseline)
+      // Hardware gravity-removed linear acceleration → inject as high-confidence accel
       const dA = Math.sqrt(lax * lax + lay * lay);
       if (this.motion.sensitivity) {
         const g = Math.max(0, dA * this.motion.sensitivity);
-        this._sensorUpdate('accel', g, 0.85);  // higher confidence
+        this._sensorUpdate('accel', g, 0.85);
       }
       this._updateSensorBar('accelBar', dA, 0.2);
+    };
+
+    // Gyroscope complementary-filter tilt mass estimation
+    this.genSensor.onGyroMass = (g, c) => this._sensorUpdate('gyro', g, c);
+
+    // Camera optical-flow resonance
+    this.camera.onWeight   = (g, c) => this._sensorUpdate('cam', g, c);
+    this.camera.onPresence = (_present, conf) => {
+      // Presence detection boosts overall confidence signal via hammerBar
+      if (conf > 0.3) this._updateSensorBar('hammerBar', conf * 0.5, 1);
     };
 
     this._setState('IDLE');
@@ -189,12 +208,16 @@ class PhonewayApp {
     this.verifier.loadHistory();
 
     if (this.settings.calibrated) {
-      this.motion.sensitivity = this.settings.motionSensitivity;
-      this.motion.baseline    = this.settings.motionBaseline;
+      this.motion.sensitivity  = this.settings.motionSensitivity;
+      this.motion.baseline     = this.settings.motionBaseline;
       this.hammer.baselineFreq = this.settings.hammerBaselineFreq;
       this.hammer.phoneMass    = this.settings.phoneMass || 170;
       this.audio.baselineFreq  = this.settings.audioBaselineFreq;
       this.audio.phoneMass     = this.settings.phoneMass || 170;
+      this.camera.phoneMass    = this.settings.phoneMass || 170;
+      this.camera.baselineFreq = this.settings.cameraBaselineFreq
+                                 || this.settings.hammerBaselineFreq;
+      this.genSensor.setGyroCalibration(this.settings.motionSensitivity);
       await this._startAllSensors();
       this._setState('READY');
     } else {
@@ -234,6 +257,7 @@ class PhonewayApp {
     this.ledPower  = new LED(document.getElementById('ledPower'));
     this.ledStable = new LED(document.getElementById('ledStable'));
     this.ledAudio  = new LED(document.getElementById('ledAudio'));
+    this.ledCamera = new LED(document.getElementById('ledCamera'));
   }
 
   _initSensorBars() {
@@ -301,15 +325,34 @@ class PhonewayApp {
       this._updateSensorBar('audioBar', 0.3, 1);
     };
     this.audio.onError = () => {
-      this.ledAudio.off();
+      this.ledAudio.on('red');
       this._showToast('Mic unavailable — audio mode disabled', 2500);
     };
     await this.audio.init().catch(() => {});
     if (this.audio.supported) this.audio.start();
 
-    // Magnetometer
+    // Camera (optical flow resonance + presence + hammer sync)
+    const camOk = await this.camera.start().catch(() => false);
+    if (camOk) {
+      this.ledCamera?.on('green');
+      this._showToast('Camera sensor active', 2000);
+    } else {
+      this.ledCamera?.on('red');
+    }
+
+    // Magnetometer baseline
     await delay(200);
     this.genSensor.recordMagBaseline();
+
+    // Gyroscope tilt baseline (after brief stabilisation)
+    if (this.genSensor.available.gyro && this.genSensor.available.gravity) {
+      await delay(400);
+      this.genSensor.recordTiltBaseline();
+    }
+
+    // Set gyro calibration from stored/current sensitivity
+    const sens = this.motion.sensitivity || this.settings.motionSensitivity || 180;
+    this.genSensor.setGyroCalibration(sens);
 
     // Update hammer sample rate from motion sensor
     this.hammer.setSampleRate(this.motion.sampleRateHz);
@@ -494,6 +537,17 @@ class PhonewayApp {
       await this.audio.recordBaseline(true).catch(() => {});
     }
 
+    // Record camera baseline (after phone settles from audio chirp)
+    if (this.camera.active) {
+      await delay(600);
+      this.camera.recordBaseline();
+    }
+
+    // Record gyroscope tilt baseline at rest
+    if (this.genSensor.available.gyro && this.genSensor.available.gravity) {
+      this.genSensor.recordTiltBaseline();
+    }
+
     this._setCalProgress(80);
 
     // ─── Step 2: First calibration weight ─────────────────────
@@ -535,6 +589,15 @@ class PhonewayApp {
     this.settings.audioBaselineFreq   = this.audio.baselineFreq;
     this.settings.phoneMass           = this.hammer.phoneMass;
     this.settings.surfaceQuality      = this.motion.surfaceQuality;
+
+    // Camera + gyro calibration
+    const phoneMass = this.hammer.phoneMass || 170;
+    const camFreq   = this.hammer.baselineFreq || this.audio.baselineFreq;
+    this.camera.phoneMass    = phoneMass;
+    this.camera.baselineFreq = camFreq;
+    this.settings.cameraBaselineFreq = camFreq;
+    this.genSensor.setGyroCalibration(this.motion.sensitivity);
+
     this._saveSettings();
 
     this._setCalProgress(100);
@@ -611,9 +674,25 @@ class PhonewayApp {
       return;
     }
     this._haptic([15, 10, 15]);
-    this._showToast('Vibrating to measure — hold still…', 3000);
+    this._showToast('Vibrating — HAMMER + CAMERA + AUDIO active…', 3000);
     this._updateSensorBar('hammerBar', 0.5, 0.5);
+
+    // Camera+Hammer cross-modal combo: capture optical flow during vibration
+    this.camera.beginHammerCapture();
+
     const result = await this.hammer.measure(4);
+
+    // Process camera optical flow captured during hammer strikes
+    const camResult = this.camera.endHammerCapture();
+    if (camResult && camResult.confidence > 0.08) {
+      this._sensorUpdate('cam', camResult.grams, camResult.confidence);
+    }
+
+    // Audio cross-validation: tell camera what frequency audio detected
+    if (this.audio.lastFreq) {
+      this.camera.validateWithAudio(this.audio.lastFreq);
+    }
+
     if (result) {
       this._sensorUpdate('hammer', result.grams, result.confidence);
       this._updateSensorBar('hammerBar', result.confidence, 1);
@@ -813,10 +892,12 @@ class PhonewayApp {
     } else {
       this.motion.stop();
       this.audio.stop();
+      this.camera.stop();
       this.genSensor.stop();
       this.display.setValue(null);
       this.ledStable.off();
       this.ledAudio.off();
+      this.ledCamera?.off();
       this.state = 'OFF';
       document.getElementById('statusText').textContent = 'OFF';
     }
@@ -846,13 +927,22 @@ class PhonewayApp {
   }
 
   _sensorUpdate(name, g, conf) {
-    const modeToSensor = { 1: 'accel', 2: 'audio', 3: 'hammer', 4: 'touch' };
+    // MODES: 0=FUSION, 1=ACCEL, 2=AUDIO, 3=HAMMER, 4=TOUCH, 5=GYRO, 6=CAM
+    const modeToSensor = { 1: 'accel', 2: 'audio', 3: 'hammer', 4: 'touch', 5: 'gyro', 6: 'cam' };
     if (this.modeIdx === 0 || modeToSensor[this.modeIdx] === name) {
       this.fusion.update(name, g, conf);
     }
 
-    // Update sensor bars
-    const barMap = { accel: 'accelBar', audio: 'audioBar', touch: 'touchBar', hammer: 'hammerBar' };
+    // Map sensors to indicator bars (gyro→accel, cam+mag→hammer bar)
+    const barMap = {
+      accel:  'accelBar',
+      gyro:   'accelBar',
+      audio:  'audioBar',
+      touch:  'touchBar',
+      mag:    'touchBar',
+      hammer: 'hammerBar',
+      cam:    'hammerBar',
+    };
     if (barMap[name]) this._updateSensorBar(barMap[name], conf, 1);
   }
 
@@ -892,8 +982,22 @@ class PhonewayApp {
       calScore       * 0.15 +
       surfScore      * 0.10;
 
+    // Multi-sensor consensus bonus: when 3+ sensors agree within 20% → +5% accuracy
+    let consensusBonus = 0;
+    if (g > 0.1) {
+      const active = [...this.fusion.sources.values()]
+        .filter(s => s.confidence > 0.2 && s.estimate > 0.05)
+        .map(s => s.estimate);
+      if (active.length >= 3) {
+        const sorted = [...active].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        const agree  = active.filter(v => Math.abs(v - median) / (median || 1) < 0.20);
+        if (agree.length >= 3) consensusBonus = 0.05;
+      }
+    }
+
     // Clamp, round to nearest integer, update display
-    const accPct = Math.min(100, Math.max(0, Math.round(rawAccuracy * 100)));
+    const accPct = Math.min(100, Math.max(0, Math.round((rawAccuracy + consensusBonus) * 100)));
 
     if (this.accuracyDisplay) {
       this.accuracyDisplay.set(accPct);
