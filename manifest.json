@@ -2,8 +2,8 @@
   "name": "Phoneway Precision Scale",
   "short_name": "Phoneway",
   "description": "High-accuracy digital scale using smartphone sensor fusion & Kalman filtering",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
@@ -27,12 +27,12 @@
   "shortcuts": [
     {
       "name": "Quick Weigh",
-      "url": "/?mode=fusion",
+      "url": "./?mode=fusion",
       "description": "Start weighing immediately"
     },
     {
       "name": "Calibrate",
-      "url": "/?cal=true",
+      "url": "./?cal=true",
       "description": "Calibrate with known weight"
     }
   ],

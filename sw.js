@@ -3,7 +3,7 @@
  * Full offline capability via cache-first strategy.
  */
 
-const CACHE = 'phoneway-v3.1';
+const CACHE = 'phoneway-v3.2';
 // Dynamic scope works on both root (localhost) and sub-path (GitHub Pages)
 const BASE  = self.registration.scope;
 
