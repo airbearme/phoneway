@@ -33,6 +33,8 @@ import { SevenSegmentDisplay, StabilityBar, LED, AccuracyDisplay, delay } from '
 import { REF_WEIGHTS, ReferenceWeightVerifier } from './referenceWeights.js';
 import { CameraSensor } from './cameraSensor.js';
 import { LearningEngine } from './learningEngine.js';
+import { GyroGate, FrequencyConsensus, PassiveResonance, TiltCorrector, VerticalAccel }
+  from './sensorCombinations.js';
 
 /* ── Known calibration weights ────────────────────────────── */
 export const CAL_WEIGHTS = [
@@ -117,6 +119,13 @@ class PhonewayApp {
     this._activeRefW     = null;
     this._lastVerifyPass = false;
 
+    // Sensor combination modules
+    this.gyroGate      = new GyroGate();
+    this.freqConsensus = new FrequencyConsensus();
+    this.passiveRes    = new PassiveResonance();
+    this.tiltCorrector = new TiltCorrector();
+    this.vertAccel     = new VerticalAccel();
+
     // Machine learning engine (on-device + community priors)
     this.learn = new LearningEngine();
 
@@ -152,24 +161,42 @@ class PhonewayApp {
     this.fusion.register('audio',  0.8);   // mic FFT resonance
     this.fusion.register('gyro',   0.75);  // complementary-filter tilt
     this.fusion.register('cam',    0.60);  // camera optical-flow resonance
-    this.fusion.register('touch',  0.35);  // coarse pressure
-    this.fusion.register('mag',    0.30);  // ferromagnetic only
+    this.fusion.register('touch',          0.35);  // coarse pressure
+    this.fusion.register('mag',            0.30);  // ferromagnetic only
+    this.fusion.register('freq_consensus', 0.95);  // multi-sensor freq agreement
+    this.fusion.register('passive_res',    0.50);  // ambient accel FFT resonance
+    this.fusion.register('accel_z',        0.35);  // vertical compression signal
+    this.fusion.register('ambient_light',  0.15);  // shadow / presence
 
     // Wire fusion callbacks
-    this.motion.onWeight  = (g, c) => this._sensorUpdate('accel',  g, c);
+    this.motion.onWeight = (g, c) => {
+      // GyroGate: reduce confidence when phone is moving (contaminated accel)
+      const gatedConf  = c * this.gyroGate.multiplier;
+      // TiltCorrector: recover signal lost to phone tilt, attenuate conf too
+      const correctedG = this.tiltCorrector.correctGrams(g);
+      const tiltConf   = gatedConf * this.tiltCorrector.flatness;
+      this._sensorUpdate('accel', correctedG, tiltConf);
+    };
     this.audio.onWeight   = (g, c) => {
       this._sensorUpdate('audio', g, c);
-      // Audio+Camera sonar: pass loaded frequency to camera for cross-validation
-      if (this.audio.lastFreq && this.camera.active) {
-        this.camera.validateWithAudio(this.audio.lastFreq);
+      if (this.audio.lastFreq) {
+        // Frequency consensus: cross-check with hammer/camera
+        this.freqConsensus.feed('audio', this.audio.lastFreq);
+        // Audio+Camera sonar cross-validation
+        if (this.camera.active) this.camera.validateWithAudio(this.audio.lastFreq);
       }
     };
-    this.touch.onWeight   = (g, c) => this._sensorUpdate('touch',  g, c);
-    this.hammer.onWeight  = (g, c) => this._sensorUpdate('hammer', g, c);
+    this.touch.onWeight  = (g, c) => this._sensorUpdate('touch', g, c);
+    this.hammer.onWeight = (g, c) => {
+      this._sensorUpdate('hammer', g, c);
+      if (this.hammer.lastFreq) this.freqConsensus.feed('hammer', this.hammer.lastFreq);
+    };
 
-    this.motion.onRaw     = (ax, ay, az) => {
-      this.hammer.feedSample(ax, ay);  // vibration hammer needs raw accel
+    this.motion.onRaw = (ax, ay, az) => {
+      this.hammer.feedSample(ax, ay);                               // vibration hammer
       this._updateSensorBar('accelBar', Math.sqrt(ax*ax + ay*ay), 0.2);
+      this.passiveRes.feed(ax, ay, az);                             // ambient resonance
+      this.vertAccel.feed(az);                                      // vertical compression
     };
 
     this.fusion.onFused = (g, c) => this._onFused(g, c);
@@ -194,12 +221,64 @@ class PhonewayApp {
     // Gyroscope complementary-filter tilt mass estimation
     this.genSensor.onGyroMass = (g, c) => this._sensorUpdate('gyro', g, c);
 
-    // Camera optical-flow resonance
-    this.camera.onWeight   = (g, c) => this._sensorUpdate('cam', g, c);
+    // GyroGate: raw gyro → motion multiplier for accel confidence
+    this.genSensor.onGyroRaw = (gx, gy, gz) => this.gyroGate.feed(gx, gy, gz);
+
+    // TiltCorrector: gravity vector → tilt compensation
+    this.genSensor.onGravity = (gx, gy, gz) => this.tiltCorrector.feedGravity(gx, gy, gz);
+
+    // Ambient light: lux drop when object placed → presence signal
+    this.genSensor.onLight = (lux) => {
+      if (!this._luxBaseline) {
+        this._luxSamples = this._luxSamples || [];
+        this._luxSamples.push(lux);
+        if (this._luxSamples.length >= 30) {
+          this._luxBaseline = this._luxSamples.reduce((a, b) => a + b, 0) / this._luxSamples.length;
+          this._luxSamples  = null;
+        }
+        return;
+      }
+      const drop  = Math.max(0, this._luxBaseline - lux);
+      const conf  = Math.min(0.15, drop / (this._luxBaseline + 1) * 0.5);
+      if (conf > 0.02) this._sensorUpdate('ambient_light', drop * 0.1, conf);
+    };
+
+    // FrequencyConsensus → fusion
+    this.freqConsensus.onConsensus = (g, c) => this._sensorUpdate('freq_consensus', g, c);
+
+    // PassiveResonance → fusion; also feed consensus engine
+    this.passiveRes.onWeight = (g, c) => {
+      this._sensorUpdate('passive_res', g, c);
+      if (this.passiveRes.baselineFreq) {
+        // Estimate what loaded freq produced this mass, feed to consensus
+        // m = phoneMass*((f0/f)²-1) → f = f0/sqrt(1+m/phoneMass)
+        const pm = this.passiveRes.phoneMass || 170;
+        const f0 = this.passiveRes.baselineFreq;
+        const loadedF = f0 / Math.sqrt(1 + g / pm);
+        if (loadedF > 0) this.freqConsensus.feed('passive_res', loadedF);
+      }
+    };
+
+    // VerticalAccel → fusion
+    this.vertAccel.onWeight = (g, c) => this._sensorUpdate('accel_z', g, c);
+
+    // Camera optical-flow resonance; also feed frequency consensus
+    this.camera.onWeight = (g, c) => {
+      this._sensorUpdate('cam', g, c);
+      if (this.camera.baselineFreq && g > 0) {
+        const f0      = this.camera.baselineFreq;
+        const pm      = this.camera.phoneMass || 170;
+        const loadedF = f0 / Math.sqrt(1 + g / pm);
+        if (loadedF > 0) this.freqConsensus.feed('cam', loadedF);
+      }
+    };
     this.camera.onPresence = (_present, conf) => {
       // Presence detection boosts overall confidence signal via hammerBar
       if (conf > 0.3) this._updateSensorBar('hammerBar', conf * 0.5, 1);
     };
+
+    this._luxBaseline = null;
+    this._luxSamples  = null;
 
     this._setState('IDLE');
 
@@ -239,7 +318,23 @@ class PhonewayApp {
       this.camera.baselineFreq = this.settings.cameraBaselineFreq
                                  || this.settings.hammerBaselineFreq;
       this.genSensor.setGyroCalibration(this.settings.motionSensitivity);
+
+      // Configure combo sensors from restored settings
+      const _phoneMass    = this.settings.phoneMass || 170;
+      const _baselineFreq = this.settings.hammerBaselineFreq
+                         || this.settings.audioBaselineFreq || null;
+      this.freqConsensus.baselineFreq = _baselineFreq;
+      this.freqConsensus.phoneMass    = _phoneMass;
+      this.passiveRes.baselineFreq    = _baselineFreq;
+      this.passiveRes.phoneMass       = _phoneMass;
+      this.vertAccel.sensitivity      = this.settings.motionSensitivity || 180;
+      if (this.settings.motionBaseline?.az != null) {
+        this.vertAccel.setBaseline(this.settings.motionBaseline.az);
+      }
+
       await this._startAllSensors();
+      // Update sample-rate-dependent parameters
+      this.passiveRes.sampleRate = this.motion.sampleRateHz;
       this._setState('READY');
     } else {
       this._showOnboard();
@@ -391,6 +486,9 @@ class PhonewayApp {
 
     // Update hammer sample rate from motion sensor
     this.hammer.setSampleRate(this.motion.sampleRateHz);
+
+    // PassiveResonance needs the real sample rate
+    this.passiveRes.sampleRate = this.motion.sampleRateHz;
   }
 
   /* ── Onboarding + Calibration ──────────────────────────────── */
@@ -642,6 +740,20 @@ class PhonewayApp {
     this.genSensor.setGyroCalibration(this.motion.sensitivity);
 
     this._saveSettings();
+
+    // Configure all combo sensors from fresh calibration data
+    const _calMass = this.hammer.phoneMass || 170;
+    const _calFreq = this.hammer.baselineFreq || this.audio.baselineFreq || null;
+
+    this.freqConsensus.baselineFreq = _calFreq;
+    this.freqConsensus.phoneMass    = _calMass;
+
+    this.passiveRes.baselineFreq = _calFreq;
+    this.passiveRes.phoneMass    = _calMass;
+    this.passiveRes.sampleRate   = this.motion.sampleRateHz;
+
+    this.vertAccel.sensitivity = this.motion.sensitivity;
+    this.vertAccel.setBaseline(this.motion.raw?.az ?? 9.81);
 
     this._setCalProgress(100);
 

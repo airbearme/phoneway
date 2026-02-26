@@ -32,11 +32,12 @@ class GenericSensorManager {
     this.absOrientation = null;
 
     this.available   = {
-      linAccel: false,
-      gravity:  false,
-      gyro:     false,
-      mag:      false,
-      absOrientation: false
+      linAccel:     false,
+      gravity:      false,
+      gyro:         false,
+      mag:          false,
+      absOrientation: false,
+      ambientLight: false,
     };
 
     // Outputs
@@ -55,6 +56,9 @@ class GenericSensorManager {
     this.onLinAccel   = null;  // callback(ax, ay, az)
     this.onMagAnomaly = null;  // callback(deltaB_nT, confidence)
     this.onGyroMass   = null;  // callback(grams, confidence)
+    this.onGyroRaw    = null;  // callback(gx, gy, gz) — raw gyro before derived
+    this.onGravity    = null;  // callback(gx, gy, gz) — gravity vector
+    this.onLight      = null;  // callback(lux)        — ambient illuminance
 
     // Complementary filter — gyro + gravity for tilt-based mass estimation
     this._compX = new ComplementaryFilter(0.96);
@@ -80,6 +84,7 @@ class GenericSensorManager {
       this._startGravity(freq),
       this._startGyro(Math.min(200, freq * 3)),  // gyro can go faster
       this._startMagnetometer(10),               // mag is slow (10 Hz is fine)
+      this._startAmbientLight(5),                // shadow presence detection
     ]);
 
     return this.available;
@@ -110,6 +115,7 @@ class GenericSensorManager {
         this.gravX = s.x ?? 0;
         this.gravY = s.y ?? 0;
         this.gravZ = s.z ?? 9.81;
+        this.onGravity?.(this.gravX, this.gravY, this.gravZ);
       });
       s.addEventListener('error', () => {});
       s.start();
@@ -126,6 +132,7 @@ class GenericSensorManager {
         this.gyroX = s.x ?? 0;
         this.gyroY = s.y ?? 0;
         this.gyroZ = s.z ?? 0;
+        this.onGyroRaw?.(this.gyroX, this.gyroY, this.gyroZ);
         this._updateGyroDerived(performance.now());
       });
       s.addEventListener('error', () => {});
@@ -225,6 +232,20 @@ class GenericSensorManager {
     this.magBaseline = this._magMavg.mean || B;
   }
 
+  async _startAmbientLight(freq = 5) {
+    if (typeof AmbientLightSensor === 'undefined') return;
+    try {
+      const s = new AmbientLightSensor({ frequency: freq });
+      s.addEventListener('reading', () => {
+        this.onLight?.(s.illuminance ?? 0);
+      });
+      s.addEventListener('error', () => {});
+      s.start();
+      this.ambientLight = s;
+      this.available.ambientLight = true;
+    } catch {}
+  }
+
   /** Compute total tilt (rad) from gravity sensor (more accurate than DeviceMotion) */
   get tiltAngle() {
     const g = Math.sqrt(this.gravX**2 + this.gravY**2 + this.gravZ**2) || 9.81;
@@ -239,6 +260,7 @@ class GenericSensorManager {
     this.gravity?.stop();
     this.gyro?.stop();
     this.magnetometer?.stop();
+    this.ambientLight?.stop();
   }
 }
 
