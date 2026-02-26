@@ -74,7 +74,11 @@ class VibrationHammer {
     this._buf    = [];
     this._active = true;
 
-    const result = await new Promise(res => { this._resolve = res; });
+    // Timeout: if accelerometer data never arrives (sensor unavailable), abort after 1.5 s
+    const result = await Promise.race([
+      new Promise(res => { this._resolve = res; }),
+      _delay(1500).then(() => { this._active = false; this._resolve = null; return null; }),
+    ]);
     return result;
   }
 
@@ -88,6 +92,8 @@ class VibrationHammer {
     for (let i = 0; i < n; i++) {
       onProgress?.(i, n);
       const r = await this.excite();
+      // If first attempt gets no data, accelerometer is unavailable — stop immediately
+      if (r === null && i === 0) return null;
       if (r && r.freq > 2 && r.confidence > 0.1) {
         freqs.push(r.freq);
         confs.push(r.confidence);

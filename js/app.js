@@ -605,10 +605,10 @@ class PhonewayApp {
         `\n\n${n > 0 ? `Collecting: ${n} / 200 samples…` : 'Waiting for motion sensor…'}`;
       if (statusEl) statusEl.textContent =
         n > 0 ? `SENSOR: ACTIVE  ·  ${n}/200` : 'SENSOR: WAITING…';
-      // Show skip button after 3 s with no data, or 5 s total
+      // Show skip button after 2 s with no data, or 4 s total
       if (skipBtn && !skipBtn._shown &&
-          (samplesReceived === 0 && Date.now() - _t0 > 3000 ||
-           Date.now() - _t0 > 5000)) {
+          (samplesReceived === 0 && Date.now() - _t0 > 2000 ||
+           Date.now() - _t0 > 4000)) {
         skipBtn.style.display = 'block';
         skipBtn._shown = true;
       }
@@ -627,7 +627,7 @@ class PhonewayApp {
           skipBtn.addEventListener('click', skipBtn._skipFn, { once: true });
         }
       }),
-      new Promise(res => setTimeout(() => res('timeout'), 12000)),
+      new Promise(res => setTimeout(() => res('timeout'), 8000)),
     ]);
 
     clearInterval(uiTimer);
