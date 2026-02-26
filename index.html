@@ -60,12 +60,16 @@
       </div>
       <div class="stability-label" id="stableLabel">READY</div>
     </div>
+
+    <!-- Reading history dots (last 5 stable readings) -->
+    <div id="readingHistory"></div>
   </div>
 
   <!-- ── Status Bar ─────────────────────────────────────────── -->
   <div id="status-bar">
     <span id="statusText">IDLE</span>
     <span id="modeLabel">FUSION</span>
+    <span id="mlLabel">ML: —</span>
     <span id="surfaceLabel">SURFACE: —</span>
   </div>
 
@@ -316,8 +320,12 @@
       <div id="calStepProgress" style="height:100%;background:linear-gradient(90deg,#7a5000,#e8c84a);transition:width .2s;border-radius:2px;width:0%"></div>
     </div>
     <div id="calSensorStatus" style="font-size:8px;letter-spacing:2px;color:#555;margin-top:8px;text-align:center"></div>
+    <button id="calReadyBtn" class="modal-btn btn-ready"
+            style="display:none;margin-top:14px;width:100%">
+      ✓ I'M READY
+    </button>
     <button id="calSkipBtn" class="modal-btn modal-btn-secondary"
-            style="display:none;margin-top:12px;width:100%;font-size:8px">
+            style="display:none;margin-top:8px;width:100%;font-size:8px">
       SKIP THIS STEP →
     </button>
   </div>
@@ -338,6 +346,20 @@
     <div class="modal-btns">
       <button class="modal-btn modal-btn-primary" id="calConfirmBtn">PROCEED</button>
       <button class="modal-btn modal-btn-secondary" id="calCancelBtn">CANCEL</button>
+    </div>
+
+    <!-- Factory reset section -->
+    <div style="margin-top:14px;text-align:center;border-top:1px solid #1e1e1e;padding-top:12px">
+      <button id="calResetBtn" class="modal-btn-link">⚠ FACTORY RESET</button>
+    </div>
+    <div id="calResetConfirm" style="display:none;margin-top:10px">
+      <p style="font-size:8px;color:#ff4444;letter-spacing:1px;line-height:1.8;margin-bottom:10px">
+        This will erase ALL calibration data, readings and ML history.<br>Cannot be undone.
+      </p>
+      <div style="display:flex;gap:8px">
+        <button id="calResetYesBtn" class="modal-btn" style="background:#500;color:#f88;border:1px solid #800;flex:1;font-size:8px">YES, RESET ALL</button>
+        <button id="calResetNoBtn"  class="modal-btn modal-btn-secondary" style="flex:1;font-size:8px">CANCEL</button>
+      </div>
     </div>
   </div>
 </div>

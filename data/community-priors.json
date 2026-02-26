@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "note": "Community-aggregated sensitivity priors (g per m/s²) by phone mass bucket. Used as a starting point before personal calibration.",
+  "buckets": [
+    { "min": 60,  "max": 120, "sensitivity": 90,  "label": "ultralight (Jelly-class)" },
+    { "min": 121, "max": 160, "sensitivity": 130, "label": "light (budget compact)" },
+    { "min": 161, "max": 185, "sensitivity": 165, "label": "mid (standard)" },
+    { "min": 186, "max": 220, "sensitivity": 200, "label": "heavy (flagship)" },
+    { "min": 221, "max": 999, "sensitivity": 250, "label": "extra-heavy (tablet/foldable)" }
+  ]
+}

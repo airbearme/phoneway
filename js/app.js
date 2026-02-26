@@ -32,6 +32,7 @@ import { GenericSensorManager }  from './genericSensors.js';
 import { SevenSegmentDisplay, StabilityBar, LED, AccuracyDisplay, delay } from './display.js';
 import { REF_WEIGHTS, ReferenceWeightVerifier } from './referenceWeights.js';
 import { CameraSensor } from './cameraSensor.js';
+import { LearningEngine } from './learningEngine.js';
 
 /* ── Known calibration weights ────────────────────────────── */
 export const CAL_WEIGHTS = [
@@ -115,6 +116,12 @@ class PhonewayApp {
     this.verifyOpen      = false;
     this._activeRefW     = null;
     this._lastVerifyPass = false;
+
+    // Machine learning engine (on-device + community priors)
+    this.learn = new LearningEngine();
+
+    // Reading history (last 5 stable readings for dot display)
+    this._readingHistory = [];
 
     // Settings persistence
     this.settings = this._loadSettings();
@@ -207,6 +214,20 @@ class PhonewayApp {
     this.verifier.loadSaved();
     this.verifier.loadHistory();
 
+    // Community priors: apply suggested sensitivity before calibration
+    await this.learn.priors.load().catch(() => {});
+    if (!this.settings.calibrated) {
+      const suggestedSens = this.learn.priors.getSuggested(this.settings.phoneMass || 170);
+      if (suggestedSens) {
+        this.motion.sensitivity = suggestedSens;
+        this._showToast(`Community prior: ${suggestedSens}g/ms⁻² for your phone`, 3000);
+      }
+    }
+
+    // Init reading history dots + ML indicator
+    this._initReadingHistory();
+    this._updateLearningIndicator();
+
     if (this.settings.calibrated) {
       this.motion.sensitivity  = this.settings.motionSensitivity;
       this.motion.baseline     = this.settings.motionBaseline;
@@ -240,6 +261,20 @@ class PhonewayApp {
     b('verifyClose',   () => this._closeVerifyPanel());
     b('verifyCloseBtn',() => this._closeVerifyPanel());
     b('verifyLockBtn', () => this._lockVerifyRef());
+
+    // Factory reset buttons (inside calOverlay)
+    b('calResetBtn',    () => {
+      const c = document.getElementById('calResetConfirm');
+      if (c) c.style.display = c.style.display === 'none' ? 'block' : 'none';
+    });
+    b('calResetYesBtn', () => {
+      document.getElementById('calOverlay').style.display = 'none';
+      this._factoryReset();
+    });
+    b('calResetNoBtn',  () => {
+      const c = document.getElementById('calResetConfirm');
+      if (c) c.style.display = 'none';
+    });
 
     // Touch pad for contact-pressure weighing
     const pad = document.getElementById('touchPad');
@@ -420,6 +455,8 @@ class PhonewayApp {
     }, { once: true });
     ov.querySelector('#calCancelBtn')?.addEventListener('click', () => {
       ov.style.display = 'none';
+      const rc = document.getElementById('calResetConfirm');
+      if (rc) rc.style.display = 'none';
     }, { once: true });
   }
 
@@ -429,12 +466,17 @@ class PhonewayApp {
     this._setState('CALIBRATING');
 
     // ─── Step 1: Zero baseline ───────────────────────────────
-    await this._showStepOverlay(
-      'STEP 1 OF 3 — ZERO',
+    // Gate: let user set up before measuring begins
+    await this._waitForReady(
+      'STEP 1 OF 3 — GET READY',
       `Place phone face-up on a SOFT, FLAT surface:\n\n` +
-      `   ✓ Mouse pad\n   ✓ Notebook / magazine\n   ✓ Folded cloth\n\n` +
-      `Remove ALL objects from the phone.\nDo not touch or move it.\n\nHolding still…`
+      `   ✓ Mouse pad        ✓ Notebook\n` +
+      `   ✓ Folded cloth     ✓ Paperback book\n\n` +
+      `Remove ALL objects from the phone screen.\n` +
+      `Do NOT touch or move it once placed.\n\n` +
+      `Tap I'M READY when set up.`
     );
+    this._showStepOverlay('STEP 1 OF 3 — MEASURING ZERO', 'Hold perfectly still…');
 
     this._setCalProgress(0);
     this.baseline.reset();
@@ -551,15 +593,16 @@ class PhonewayApp {
     this._setCalProgress(80);
 
     // ─── Step 2: First calibration weight ─────────────────────
-    await this._showStepOverlay(
-      'STEP 2 OF 3 — FIRST WEIGHT',
+    await this._waitForReady(
+      'STEP 2 OF 3 — ADD YOUR WEIGHT',
       `Gently place your calibration weight in the\nCENTER of the phone screen.\n\n` +
       `Selected: ${this.calWeightG.toFixed(2)} g\n\n` +
       `💵 Dollar bill = 1.00 g\n` +
       `🪙 Penny       = 2.50 g\n` +
       `🪙 Nickel      = 5.00 g\n\n` +
-      `Hold PERFECTLY still for 4 seconds…`
+      `Place weight, then tap I'M READY.\nDo NOT touch the phone during measurement.`
     );
+    this._showStepOverlay('STEP 2 — MEASURING…', 'Hold PERFECTLY still for 4 seconds…');
 
     const deltaA1 = await this._measureDeltaA(4000, pct => this._setCalProgress(80 + pct * 10));
     this.firstDeltaA = deltaA1;
@@ -836,6 +879,20 @@ class PhonewayApp {
     // Haptic pulse on first PASS
     if (pass && !this._lastVerifyPass) this._haptic([20, 15, 60]);
     this._lastVerifyPass = pass;
+
+    // ML: self-calibrate sensitivity from PASS verification events
+    if (pass && this._activeRefW && this.motion.sensitivity) {
+      const newSens = this.learn.learn(
+        this._activeRefW.grams, measured, this.motion.sensitivity
+      );
+      if (newSens && Math.abs(newSens - this.motion.sensitivity) / this.motion.sensitivity < 0.30) {
+        this.motion.sensitivity      = newSens;
+        this.settings.motionSensitivity = newSens;
+        this._saveSettings();
+        this._showToast(`✓ ML refined: ${newSens.toFixed(1)} g/ms⁻²`, 2500);
+      }
+      this._updateLearningIndicator();
+    }
   }
 
   _lockVerifyRef() {
@@ -1011,6 +1068,14 @@ class PhonewayApp {
 
     if (g > 0.1) {
       this._setState(stable ? 'STABLE' : 'MEASURING');
+      // ML: log each stable reading
+      if (stable) {
+        const activeSensors = [...this.fusion.sources.values()]
+          .filter(s => s.confidence > 0.2).length;
+        this.learn.logReading(g, accPct, activeSensors);
+        this._pushReadingHistory(g, accPct);
+        this._updateLearningIndicator();
+      }
     } else {
       if (this.state !== 'READY') this._setState('READY');
       this._stableBuf = [];
@@ -1067,6 +1132,82 @@ class PhonewayApp {
   _hideStepOverlay() {
     const ov = document.getElementById('stepOverlay');
     if (ov) ov.style.display = 'none';
+  }
+
+  /**
+   * Show stepOverlay with title + body, then wait for user to tap "I'M READY".
+   * Blocks calibration flow until user is set up and confirms.
+   */
+  _waitForReady(title, body) {
+    this._showStepOverlay(title, body);
+    return new Promise(resolve => {
+      const btn = document.getElementById('calReadyBtn');
+      if (!btn) { setTimeout(resolve, 3000); return; }
+      btn.style.display = 'block';
+      btn.addEventListener('click', () => {
+        btn.style.display = 'none';
+        this._haptic([20, 10, 40]);
+        resolve();
+      }, { once: true });
+    });
+  }
+
+  /** Erase all stored data and reload the app for a full factory reset */
+  _factoryReset() {
+    [
+      'phoneway_v2', 'phoneway_savedRef', 'phoneway_verifyHistory',
+      'phoneway_readingLog', 'phoneway_learnStats',
+    ].forEach(k => { try { localStorage.removeItem(k); } catch {} });
+    this.learn.resetAll();
+    this._haptic([30, 20, 30, 20, 200]);
+    this._showToast('Factory reset complete — reloading…', 2000);
+    setTimeout(() => location.reload(), 2100);
+  }
+
+  /** Create the 5 reading-history dots in #readingHistory */
+  _initReadingHistory() {
+    const container = document.getElementById('readingHistory');
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'reading-dot';
+      container.appendChild(dot);
+    }
+  }
+
+  /** Update reading history dots with the latest stable reading */
+  _pushReadingHistory(grams, accuracy) {
+    this._readingHistory.push({ grams, accuracy });
+    if (this._readingHistory.length > 5) this._readingHistory.shift();
+
+    const dots = document.querySelectorAll('#readingHistory .reading-dot');
+    dots.forEach((dot, i) => {
+      const offset = i - (5 - this._readingHistory.length);
+      const entry  = offset >= 0 ? this._readingHistory[offset] : null;
+      dot.className = 'reading-dot';
+      if (entry) {
+        dot.classList.add(
+          entry.accuracy >= 85 ? 'dot-good' :
+          entry.accuracy >= 60 ? 'dot-mid'  : 'dot-low'
+        );
+        dot.title = `${entry.grams.toFixed(1)}g @ ${entry.accuracy}%`;
+      }
+    });
+  }
+
+  /** Refresh the ML indicator label in the status bar */
+  _updateLearningIndicator() {
+    const el = document.getElementById('mlLabel');
+    if (!el) return;
+    const { verifyCount } = this.learn.learnStats;
+    if (verifyCount === 0) {
+      el.textContent = 'ML: —';
+      el.style.color  = '#333';
+    } else {
+      el.textContent = `ML:${verifyCount}V`;
+      el.style.color  = verifyCount >= 3 ? 'var(--seg-on)' : '#e8c84a';
+    }
   }
 
   _showToast(text, ms = 2500) {

@@ -1379,3 +1379,69 @@ html, body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #111; }
 ::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 2px; }
+
+/* ══════════════════════════════════════════════════════════════
+   ML + CALIBRATION UX ADDITIONS (v3)
+══════════════════════════════════════════════════════════════ */
+
+/* ── "I'M READY" button pulse ──────────────────────────────── */
+@keyframes readyPulse {
+  0%, 100% { box-shadow: 0 0 10px var(--seg-on), 0 0 24px rgba(57,255,20,.3), var(--shadow-gold); }
+  50%       { box-shadow: 0 0 22px var(--seg-on), 0 0 48px rgba(57,255,20,.6), var(--shadow-gold); }
+}
+
+.btn-ready {
+  background: linear-gradient(135deg, #002200 0%, #005500 40%, #00cc00 50%, #005500 60%, #001a00 100%);
+  color: #afffaf;
+  font-size: 11px;
+  letter-spacing: 4px;
+  animation: readyPulse 1.4s ease-in-out infinite;
+  border: 1px solid var(--seg-on);
+}
+.btn-ready:active { filter: brightness(0.8); animation: none; }
+
+/* ── Reading history dots ──────────────────────────────────── */
+#readingHistory {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 6px;
+  min-height: 10px;
+}
+
+.reading-dot {
+  width:  8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1a1a1a;
+  border: 1px solid #222;
+  transition: background 0.3s, box-shadow 0.3s;
+  flex-shrink: 0;
+}
+.reading-dot.dot-good { background: var(--seg-on);  box-shadow: 0 0 6px var(--seg-on); }
+.reading-dot.dot-mid  { background: #e8c84a;         box-shadow: 0 0 5px #e8c84a; }
+.reading-dot.dot-low  { background: #ff6b00;         box-shadow: 0 0 5px #ff6b00; }
+
+/* ── ML indicator in status bar ────────────────────────────── */
+#mlLabel {
+  color: #333;
+  font-size: 8px;
+  letter-spacing: 1px;
+  transition: color 0.4s;
+}
+
+/* ── Factory reset link style ──────────────────────────────── */
+.modal-btn-link {
+  background: transparent;
+  border: none;
+  color: #444;
+  font-family: var(--font-ui);
+  font-size: 7px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  padding: 4px 8px;
+  text-decoration: underline;
+  text-decoration-color: #333;
+  transition: color 0.15s;
+}
+.modal-btn-link:hover { color: #ff4444; text-decoration-color: #ff4444; }
