@@ -33,7 +33,7 @@ import { SevenSegmentDisplay, StabilityBar, LED, AccuracyDisplay, delay } from '
 import { REF_WEIGHTS, ReferenceWeightVerifier } from './referenceWeights.js';
 import { CameraSensor } from './cameraSensor.js';
 import { LearningEngine } from './learningEngine.js';
-import { GyroGate, FrequencyConsensus, PassiveResonance, TiltCorrector, VerticalAccel }
+import { GyroGate, FrequencyConsensus, PassiveResonance, TiltCorrector, VerticalAccel, MultiSensorEnsemble, VarianceDetector }
   from './sensorCombinations.js';
 
 /* ── Known calibration weights ────────────────────────────── */
@@ -58,7 +58,7 @@ const UNITS = [
   { key: 'dwt', label: 'dwt', factor: 0.643015,  places: 3 },
 ];
 
-const MODES  = ['FUSION', 'ACCEL', 'AUDIO', 'HAMMER', 'TOUCH', 'GYRO', 'CAM'];
+const MODES  = ['FUSION', 'ACCEL', 'AUDIO', 'HAMMER', 'TOUCH', 'GYRO', 'CAM', 'ENSEMBLE'];
 
 const SURFACE_TIPS = {
   poor:      '⚠ Hard surface — move to notebook or mouse-pad for best accuracy',
@@ -125,6 +125,8 @@ class PhonewayApp {
     this.passiveRes    = new PassiveResonance();
     this.tiltCorrector = new TiltCorrector();
     this.vertAccel     = new VerticalAccel();
+    this.ensemble      = new MultiSensorEnsemble(); // NEW: Weighted voting across all sensors
+    this.varDetector   = new VarianceDetector();    // NEW: Detect placement by variance change
 
     // Machine learning engine (on-device + community priors)
     this.learn = new LearningEngine();
@@ -167,6 +169,7 @@ class PhonewayApp {
     this.fusion.register('passive_res',    0.50);  // ambient accel FFT resonance
     this.fusion.register('accel_z',        0.35);  // vertical compression signal
     this.fusion.register('ambient_light',  0.15);  // shadow / presence
+    this.fusion.register('ensemble',       0.88);  // multi-sensor weighted voting
 
     // Wire fusion callbacks
     this.motion.onWeight = (g, c) => {
@@ -197,6 +200,7 @@ class PhonewayApp {
       this._updateSensorBar('accelBar', Math.sqrt(ax*ax + ay*ay), 0.2);
       this.passiveRes.feed(ax, ay, az);                             // ambient resonance
       this.vertAccel.feed(az);                                      // vertical compression
+      this.varDetector.feed(ax, ay, az);                            // placement detection
     };
 
     this.fusion.onFused = (g, c) => this._onFused(g, c);
@@ -277,6 +281,23 @@ class PhonewayApp {
       if (conf > 0.3) this._updateSensorBar('hammerBar', conf * 0.5, 1);
     };
 
+    // Multi-sensor ensemble → fusion (weighted voting across all sensors)
+    this.ensemble.onConsensus = (g, c, count) => {
+      this._sensorUpdate('ensemble', g, c * 1.1); // Slight confidence boost for consensus
+    };
+
+    // Variance detector → triggers when objects are placed/removed
+    this.varDetector.onPlacement = (action, _variance) => {
+      // Reset stability buffer when object placement detected
+      if (action === 'added') {
+        this._stableBuf = [];
+        // Trigger a hammer measurement for immediate response
+        if (this.hammer.supported && this.hammer.baselineFreq) {
+          this._runHammerMeasure();
+        }
+      }
+    };
+
     this._luxBaseline = null;
     this._luxSamples  = null;
 
@@ -336,9 +357,22 @@ class PhonewayApp {
       // Update sample-rate-dependent parameters
       this.passiveRes.sampleRate = this.motion.sampleRateHz;
       this._setState('READY');
+      
+      // Start periodic sensor polling for maximum algorithm coverage
+      this._startSensorPolling();
     } else {
       this._showOnboard();
     }
+  }
+
+  /** Start background sensor polling to maximize algorithm coverage */
+  _startSensorPolling() {
+    // Poll every 2 seconds to trigger additional sensor measurements
+    this._sensorPollInterval = setInterval(() => {
+      if (this.state === 'READY' || this.state === 'MEASURING') {
+        this._pollAllSensors();
+      }
+    }, 2000);
   }
 
   /* ── UI Binding ───────────────────────────────────────────── */
@@ -663,12 +697,20 @@ class PhonewayApp {
         'STEP 1b — VIBRATION CALIBRATION',
         `Stay still — phone will vibrate ${6} times to measure resonance.\n\nThis improves accuracy significantly.`
       );
-      await Promise.race([
+      const hammerResult = await Promise.race([
         this.hammer.calibrateBaseline(6, (i, n) => {
           this._setCalProgress(65 + (i / n) * 15);
         }),
-        new Promise(res => setTimeout(res, 8000)),  // hard 8 s cap
+        new Promise(res => setTimeout(() => res('timeout'), 8000)),  // hard 8 s cap
       ]);
+      if (hammerResult === 'timeout' || !hammerResult) {
+        this._showToast('Vibration sensor timeout — using fallback mode', 3000);
+        // Set a fallback baseline frequency based on typical phone resonance
+        if (!this.hammer.baselineFreq) {
+          this.hammer.baselineFreq = 18.0; // Typical phone resonance ~18Hz
+          this.hammer.phoneMass = this.settings.phoneMass || 170;
+        }
+      }
     }
 
     // Record audio baseline
@@ -708,7 +750,21 @@ class PhonewayApp {
     const deltaA1 = await this._measureDeltaA(4000, pct => this._setCalProgress(80 + pct * 10));
     this.firstDeltaA = deltaA1;
     this.firstCalG   = this.calWeightG;
-    this.motion.addCalPoint(this.calWeightG, deltaA1);
+    
+    // Add calibration point with validation
+    const calOk1 = this.motion.addCalPoint(this.calWeightG, deltaA1);
+    if (!calOk1) {
+      this._showToast('Warning: Small signal detected — using fallback calibration', 4000);
+    }
+    
+    // Ensure sensitivity is set even if calibration partially failed
+    if (!this.motion.sensitivity || this.motion.sensitivity <= 0) {
+      // Use community prior or default
+      const priorSens = this.learn.priors.getSuggested(this.settings.phoneMass || 170);
+      this.motion.sensitivity = priorSens || 150;
+      this._showToast(`Using fallback sensitivity: ${this.motion.sensitivity.toFixed(1)}`, 3000);
+    }
+    
     this._setCalProgress(90);
 
     // ─── Step 3: Second calibration weight for accuracy ───────
@@ -796,32 +852,71 @@ class PhonewayApp {
   async _offerSecondWeight() {
     return new Promise(res => {
       const used = this.calWeightG;
-      // Suggest a complementary weight (different from first)
+      // Suggest a complementary weight (different from first, ideally lighter)
       const suggestions = CAL_WEIGHTS.filter(w =>
-        w.grams !== null && Math.abs(w.grams - used) > 0.8 && w.grams < 10
-      );
-      const suggest = suggestions[0];
+        w.grams !== null && Math.abs(w.grams - used) > 0.5 && w.grams < 10 && w.grams !== used
+      ).sort((a, b) => Math.abs(a.grams - used) - Math.abs(b.grams - used)); // Closest difference first
+      
+      // Pick a weight that gives good spread (prefer smaller if first was large, or vice versa)
+      const suggest = suggestions.find(w => w.grams < used) || suggestions[0] || null;
       if (!suggest) { res(null); return; }
 
       const el = document.createElement('div');
       el.className = 'second-cal-toast';
+      el.style.cssText = `
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.95); border: 2px solid var(--seg-on);
+        border-radius: 12px; padding: 20px; max-width: 320px;
+        z-index: 10000; text-align: center; box-shadow: 0 0 30px rgba(232,200,74,0.3);
+      `;
       el.innerHTML = `
-        <p style="font-size:9px;letter-spacing:1px;color:#bbb;margin-bottom:8px">
-          Add a 2nd weight for <strong style="color:#e8c84a">higher accuracy?</strong>
+        <p style="font-size:14px;letter-spacing:1px;color:#e8c84a;margin-bottom:12px;font-weight:bold">
+          📈 IMPROVE ACCURACY
         </p>
-        <p style="font-size:8px;color:#888;margin-bottom:10px">
-          ${suggest.icon} ${suggest.label} (${suggest.grams.toFixed(2)} g)
+        <p style="font-size:12px;color:#ccc;margin-bottom:8px;line-height:1.4">
+          You used: <strong>${used.toFixed(2)}g</strong><br>
+          Add a second weight for 2-point calibration
         </p>
-        <div style="display:flex;gap:8px">
-          <button id="secYes" class="btn-sm">YES — MORE ACCURATE</button>
-          <button id="secNo"  class="btn-sm" style="background:#222;color:#666;border:1px solid #333">SKIP</button>
-        </div>`;
+        <div style="background:#1a1a1a;border-radius:8px;padding:12px;margin:12px 0">
+          <p style="font-size:24px;margin:4px 0">${suggest.icon}</p>
+          <p style="font-size:14px;color:#fff;margin:4px 0;font-weight:bold">${suggest.label}</p>
+          <p style="font-size:16px;color:#e8c84a;margin:4px 0">${suggest.grams.toFixed(2)} g</p>
+          <p style="font-size:10px;color:#888;margin-top:8px">${suggest.tip}</p>
+        </div>
+        <p style="font-size:10px;color:#666;margin-bottom:15px">
+          Tap YES, then remove first weight and place the new one
+        </p>
+        <div style="display:flex;gap:12px;justify-content:center">
+          <button id="secYes" class="btn" style="background:var(--seg-on);color:#000;font-weight:bold;padding:12px 24px">
+            ✓ YES — USE 2ND WEIGHT
+          </button>
+          <button id="secNo" class="btn" style="background:#333;color:#999;padding:12px 20px">
+            SKIP
+          </button>
+        </div>
+        <p id="secTimer" style="font-size:10px;color:#555;margin-top:12px">Auto-skip in 30s</p>
+      `;
       document.body.appendChild(el);
 
-      const cleanup = (v) => { el.remove(); res(v); };
+      // Update timer every second
+      let timeLeft = 30;
+      const timerEl = el.querySelector('#secTimer');
+      const timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timerEl) timerEl.textContent = `Auto-skip in ${timeLeft}s`;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          cleanup(null);
+        }
+      }, 1000);
+
+      const cleanup = (v) => { 
+        clearInterval(timerInterval);
+        el.remove(); 
+        res(v); 
+      };
       el.querySelector('#secYes').onclick = () => cleanup(suggest);
       el.querySelector('#secNo').onclick  = () => cleanup(null);
-      setTimeout(() => cleanup(null), 12000);
     });
   }
 
@@ -1072,6 +1167,11 @@ class PhonewayApp {
       this.ledCamera?.off();
       this.state = 'OFF';
       document.getElementById('statusText').textContent = 'OFF';
+      // Stop sensor polling
+      if (this._sensorPollInterval) {
+        clearInterval(this._sensorPollInterval);
+        this._sensorPollInterval = null;
+      }
     }
     this._haptic([25]);
   }
@@ -1100,9 +1200,14 @@ class PhonewayApp {
 
   _sensorUpdate(name, g, conf) {
     // MODES: 0=FUSION, 1=ACCEL, 2=AUDIO, 3=HAMMER, 4=TOUCH, 5=GYRO, 6=CAM
-    const modeToSensor = { 1: 'accel', 2: 'audio', 3: 'hammer', 4: 'touch', 5: 'gyro', 6: 'cam' };
+    const modeToSensor = { 1: 'accel', 2: 'audio', 3: 'hammer', 4: 'touch', 5: 'gyro', 6: 'cam', 7: 'ensemble' };
     if (this.modeIdx === 0 || modeToSensor[this.modeIdx] === name) {
       this.fusion.update(name, g, conf);
+    }
+
+    // Feed ensemble for multi-sensor consensus (all modes)
+    if (g > 0 && conf > 0.05) {
+      this.ensemble.feed(name, g, conf);
     }
 
     // Map sensors to indicator bars (gyro→accel, cam+mag→hammer bar)
@@ -1118,10 +1223,65 @@ class PhonewayApp {
     if (barMap[name]) this._updateSensorBar(barMap[name], conf, 1);
   }
 
+  /** 
+   * Emergency fallback weight calculation when fusion isn't producing results.
+   * Uses raw deltaA directly with current sensitivity.
+   */
+  _getEmergencyWeight() {
+    if (!this.motion.sensitivity) return null;
+    const deltaA = this.motion.deltaA;
+    if (deltaA > 0.00005) { // Very low threshold
+      const g = deltaA * this.motion.sensitivity;
+      return { grams: Math.max(0, g), confidence: 0.15 };
+    }
+    return null;
+  }
+
+  /**
+   * Try to trigger additional sensor measurements when idle.
+   * Called periodically to ensure all sensors are contributing.
+   */
+  async _pollAllSensors() {
+    // Trigger hammer measurement if we have a baseline but no recent activity
+    if (this.hammer.supported && this.hammer.baselineFreq && this.state === 'READY') {
+      // Passive hammer check - just one quick vibration
+      try {
+        const result = await Promise.race([
+          this.hammer.excite(),
+          new Promise(r => setTimeout(() => r(null), 500))
+        ]);
+        if (result && result.freq > 0) {
+          // Calculate weight from frequency shift
+          const baseline = this.hammer.baselineFreq;
+          const loaded = result.freq;
+          if (loaded < baseline * 0.99) { // Frequency dropped = mass added
+            const ratio = baseline / loaded;
+            const phoneMass = this.hammer.phoneMass || 170;
+            const g = phoneMass * (ratio * ratio - 1);
+            if (g > 0.1) {
+              this._sensorUpdate('hammer', g, result.confidence * 0.5);
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+  }
+
   /* ── Fused output ─────────────────────────────────────────── */
   _onFused(g, conf) {
     if (!this.powered || this.held ||
         ['OFF','ZEROING','CALIBRATING'].includes(this.state)) return;
+
+    // Emergency fallback: if fusion returns 0 but we have raw sensor data, use it
+    if (g < 0.01 && conf < 0.05) {
+      const emergency = this._getEmergencyWeight();
+      if (emergency && emergency.grams > 0.1) {
+        g = emergency.grams;
+        conf = emergency.confidence;
+        // Inject into fusion for next cycle
+        this.fusion.update('accel', g, conf);
+      }
+    }
 
     this.currentG = g;
     this._updateReadout(g);

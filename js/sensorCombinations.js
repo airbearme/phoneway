@@ -269,4 +269,113 @@ class VerticalAccel {
   }
 }
 
-export { GyroGate, FrequencyConsensus, PassiveResonance, TiltCorrector, VerticalAccel };
+/* ═══════════════════════════════════════════════════════════════
+   MultiSensorEnsemble
+   Combines ALL available sensors using weighted voting.
+   When sensors disagree, uses median with outlier rejection.
+   When sensors agree, boosts confidence.
+═══════════════════════════════════════════════════════════════ */
+class MultiSensorEnsemble {
+  constructor() {
+    this.readings = new Map(); // sensor -> { grams, confidence, timestamp }
+    this.maxAge = 2000; // ms - discard readings older than this
+    this.onConsensus = null;
+  }
+
+  feed(sensor, grams, confidence) {
+    this.readings.set(sensor, { 
+      grams, 
+      confidence, 
+      timestamp: Date.now() 
+    });
+    this._compute();
+  }
+
+  _compute() {
+    const now = Date.now();
+    // Filter out old readings
+    for (const [k, v] of this.readings) {
+      if (now - v.timestamp > this.maxAge) this.readings.delete(k);
+    }
+
+    const entries = [...this.readings.values()];
+    if (entries.length < 2) return; // Need at least 2 sensors
+
+    // Weighted median
+    const sorted = entries
+      .filter(e => e.confidence > 0.1)
+      .sort((a, b) => a.grams - b.grams);
+    
+    if (sorted.length === 0) return;
+
+    // Simple median
+    const median = sorted[Math.floor(sorted.length / 2)].grams;
+    
+    // Find sensors that agree with median (within 30%)
+    const agreeing = sorted.filter(e => 
+      Math.abs(e.grams - median) / (median || 1) < 0.30
+    );
+
+    if (agreeing.length === 0) return;
+
+    // Weighted average of agreeing sensors
+    let weightSum = 0, confSum = 0;
+    for (const e of agreeing) {
+      weightSum += e.grams * e.confidence;
+      confSum += e.confidence;
+    }
+    
+    const consensusG = weightSum / confSum;
+    const consensusConf = Math.min(0.95, confSum / agreeing.length * 
+      (1 + (agreeing.length - 1) * 0.1)); // Bonus for multi-sensor agreement
+
+    this.onConsensus?.(consensusG, consensusConf, agreeing.length);
+  }
+
+  clear() {
+    this.readings.clear();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VarianceDetector
+   Detects weight placement by monitoring sudden changes in
+   accelerometer variance pattern. Different from baseline shift.
+═══════════════════════════════════════════════════════════════ */
+class VarianceDetector {
+  constructor() {
+    this._history = [];
+    this._window = 50;
+    this._baselineVar = null;
+    this.onPlacement = null;
+  }
+
+  feed(ax, ay, az) {
+    const mag = Math.sqrt(ax*ax + ay*ay + az*az);
+    this._history.push(mag);
+    if (this._history.length > this._window) this._history.shift();
+    if (this._history.length < this._window) return;
+
+    const mean = this._history.reduce((a,b) => a+b, 0) / this._window;
+    const variance = this._history.reduce((a,b) => a + (b-mean)**2, 0) / this._window;
+
+    if (this._baselineVar === null) {
+      this._baselineVar = variance;
+      return;
+    }
+
+    // Detect significant variance change (object placed/removed)
+    const ratio = variance / (this._baselineVar || 1);
+    if (ratio > 1.5 || ratio < 0.7) {
+      this.onPlacement?.(ratio > 1.5 ? 'added' : 'removed', variance);
+      this._baselineVar = variance; // Adapt to new state
+    }
+  }
+
+  reset() {
+    this._history = [];
+    this._baselineVar = null;
+  }
+}
+
+export { GyroGate, FrequencyConsensus, PassiveResonance, TiltCorrector, VerticalAccel, MultiSensorEnsemble, VarianceDetector };
