@@ -663,9 +663,12 @@ class PhonewayApp {
         'STEP 1b — VIBRATION CALIBRATION',
         `Stay still — phone will vibrate ${6} times to measure resonance.\n\nThis improves accuracy significantly.`
       );
-      await this.hammer.calibrateBaseline(6, (i, n) => {
-        this._setCalProgress(65 + (i / n) * 15);
-      });
+      await Promise.race([
+        this.hammer.calibrateBaseline(6, (i, n) => {
+          this._setCalProgress(65 + (i / n) * 15);
+        }),
+        new Promise(res => setTimeout(res, 8000)),  // hard 8 s cap
+      ]);
     }
 
     // Record audio baseline
@@ -1355,5 +1358,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});
+    // Auto-reload when a new SW takes over so fresh JS is always running
+    navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
   }
 });
