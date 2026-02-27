@@ -24,6 +24,10 @@ import {
   AdaptiveKalmanFilter, KalmanFilter2D, ParticleFilter,
   MovingAverageFilter, MedianFilter, ExpSmooth
 } from './kalman.js';
+import { 
+  PrecisionMeasurement, TemperatureCompensator, OutlierRejectionFilter,
+  ConvergenceDetector, MultiPointCalibration 
+} from './precisionEngine.js';
 
 /* ═══════════════════════════════════════════════════════════════
    BaselineRecorder  —  captures quiet-phone average
@@ -59,14 +63,24 @@ class BaselineRecorder {
 class MotionSensor {
   constructor() {
     // Filtering pipeline  (order matters!)
-    this.kalman  = new KalmanFilter2D({ R: 0.6, Q: 0.015 });
+    this.kalman  = new KalmanFilter2D({ R: 0.3, Q: 0.008 });  // Tighter for precision
     this.median  = new MedianFilter(11);
     this.mavg    = new MovingAverageFilter(50);
-    this.particle = new ParticleFilter({ N: 300, sigmaProcess: 0.08, sigmaMeasure: 0.4 });
+    this.particle = new ParticleFilter({ N: 300, sigmaProcess: 0.05, sigmaMeasure: 0.25 });
+    
+    // NEW: Precision components
+    this.outlierFilter = new OutlierRejectionFilter({ sigmaThreshold: 2.0, windowSize: 15 });
+    this.tempCompensator = new TemperatureCompensator();
+    this.convergenceDetector = new ConvergenceDetector({ varianceThreshold: 0.005 });
+    this.multiPointCal = new MultiPointCalibration();
 
     this.baseline    = null;
     this.sensitivity = null;   // g/(m·s⁻²) — from calibration
     this.calPoints   = [];     // [{deltaA, grams}] for least-squares
+    
+    // Precision tracking
+    this._precisionHistory = [];
+    this._currentPrecision = Infinity;
 
     this.active  = false;
     this._handler = null;
@@ -77,9 +91,11 @@ class MotionSensor {
     this.weightG  = 0;
     this.confidence = 0;
     this.surfaceQuality = 'unknown';  // 'poor'|'ok'|'good'|'excellent'
+    this.isConverged = false;
 
     this.onWeight = null;
     this.onRaw    = null;
+    this.onPrecisionUpdate = null;
   }
 
   async request() {
@@ -139,17 +155,52 @@ class MotionSensor {
   }
 
   _applyDeltaA(dA) {
-    const medVal = this.median.update(dA);
+    // Stage 1: Outlier rejection
+    const cleanDA = this.outlierFilter.feed(dA);
+    
+    // Stage 2: Median filter for spike removal
+    const medVal = this.median.update(cleanDA);
+    
+    // Stage 3: Moving average for smoothing
     const mavVal = this.mavg.update(medVal);
+    
+    // Stage 4: Particle filter for non-Gaussian noise
     const pfVal  = this.particle.update(mavVal);
 
     if (this.sensitivity !== null) {
-      const rawG = pfVal * this.sensitivity;
+      // Stage 5: Convert to grams with multi-point calibration if available
+      let rawG;
+      if (this.multiPointCal.coeffs) {
+        rawG = this.multiPointCal.estimate(pfVal);
+      } else {
+        rawG = pfVal * this.sensitivity;
+      }
+      
+      // Stage 6: Temperature compensation
+      rawG = this.tempCompensator.compensate(rawG);
+      
       this.weightG = Math.max(0, rawG);
 
-      // Confidence: stable signal = high confidence
+      // Stage 7: Calculate confidence based on multiple factors
       const sigma = this.mavg.stdDev;
-      this.confidence = Math.min(1, 1 / (1 + sigma * 30));
+      const snr = this.weightG / (sigma * this.sensitivity + 0.001);
+      const convergenceBonus = this.isConverged ? 0.15 : 0;
+      this.confidence = Math.min(0.95, (1 / (1 + sigma * 50)) * 0.7 + Math.min(1, snr / 10) * 0.3 + convergenceBonus);
+
+      // Stage 8: Track convergence
+      this.isConverged = this.convergenceDetector.feed(this.weightG);
+      
+      // Stage 9: Track precision
+      if (this.isConverged) {
+        this._precisionHistory.push({
+          weight: this.weightG,
+          stdDev: sigma * this.sensitivity,
+          time: Date.now()
+        });
+        if (this._precisionHistory.length > 100) this._precisionHistory.shift();
+        this._currentPrecision = sigma * this.sensitivity;
+        this.onPrecisionUpdate?.(this._currentPrecision, this.weightG);
+      }
 
       this.onWeight?.(this.weightG, this.confidence);
     }
@@ -168,15 +219,18 @@ class MotionSensor {
   }
 
   /** Add calibration point and refit sensitivity */
-  addCalPoint(knownWeightG, deltaA) {
-    // Lower threshold: 0.0001 instead of 0.0005 for better sensitivity on hard surfaces
-    if (deltaA < 0.0001) {
+  addCalPoint(knownWeightG, deltaA, options = {}) {
+    const confidence = options.confidence || 0.8;
+    
+    // Lower threshold: 0.00005 for maximum sensitivity on hard surfaces
+    if (deltaA < 0.00005) {
       console.warn('Calibration deltaA too small:', deltaA, '- using fallback sensitivity');
-      // Use a fallback sensitivity based on typical phone characteristics
-      // This allows calibration to proceed even with minimal signal
-      deltaA = 0.001; // Minimum viable signal
+      deltaA = 0.0005; // Minimum viable signal
     }
-    this.calPoints.push({ deltaA, grams: knownWeightG });
+    
+    // Add to both linear calibration and multi-point calibration
+    this.calPoints.push({ deltaA, grams: knownWeightG, confidence });
+    this.multiPointCal.addPoint(knownWeightG, deltaA, confidence);
     this._fitSensitivity();
 
     // Classify surface quality from sensitivity
@@ -223,7 +277,64 @@ class MotionSensor {
   }
 
   get sampleRateHz() { return 1000 / (this._interval || 16); }
-}
+  
+  /**
+   * High-precision measurement with adaptive duration
+   * @param {Object} options
+   * @param {number} options.targetPrecision — target std dev in grams (default 0.05)
+   * @param {number} options.timeout — max duration in ms (default 8000)
+   * @param {number} options.minDuration — minimum duration in ms (default 2000)
+   * @returns {Promise<{ grams: number, precision: number, confidence: number }>}
+   */
+  async measurePrecision(options = {}) {
+    const target = options.targetPrecision || 0.05;
+    const timeout = options.timeout || 8000;
+    const minDuration = options.minDuration || 2000;
+    
+    const pm = new PrecisionMeasurement({
+      targetPrecision: target,
+      maxDuration: timeout,
+      minDuration: minDuration
+    });
+    
+    // Sampler function that reads current deltaA
+    const sampler = async () => {
+      return {
+        grams: this.deltaA * (this.sensitivity || 150),
+        confidence: this.confidence,
+        rawDeltaA: this.deltaA
+      };
+    };
+    
+    const result = await pm.measure(sampler);
+    
+    // Learn temperature drift from this measurement
+    this.tempCompensator.learnDrift(result.grams);
+    
+    return {
+      grams: result.grams,
+      precision: result.precision,
+      confidence: result.confidence,
+      samples: result.samples
+    };
+  }
+  
+  /**
+   * Get current measurement precision (standard deviation in grams)
+   */
+  get currentPrecision() {
+    return this._currentPrecision;
+  }
+  
+  /**
+   * Reset calibration and precision tracking
+   */
+  resetPrecisionTracking() {
+    this._precisionHistory = [];
+    this._currentPrecision = Infinity;
+    this.convergenceDetector.reset();
+    this.tempCompensator.calibrateZero(0);
+  }
 
 /* ═══════════════════════════════════════════════════════════════
    TouchSensor  —  pressure / area via pointer/touch events

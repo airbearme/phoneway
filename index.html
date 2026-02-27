@@ -69,6 +69,7 @@
   <div id="status-bar">
     <span id="statusText">IDLE</span>
     <span id="modeLabel">FUSION</span>
+    <span id="precisionLabel">σ: —</span>
     <span id="mlLabel">ML: —</span>
     <span id="surfaceLabel">SURFACE: —</span>
   </div>
@@ -230,6 +231,23 @@
           <path d="M52 26 Q56 22 52 18 Q48 14 52 10" stroke="#ff8c00" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
         </svg>
         <div class="btn-label">HAMMER</div>
+      </button>
+
+      <!-- PRECISION — high accuracy measurement -->
+      <button class="btn btn-precision" id="btnPrecision" aria-label="High precision measure" title="High Precision Mode">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#001a0a" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#00ff66"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#00ff66"/>
+          <!-- Target crosshairs -->
+          <circle cx="30" cy="24" r="10" stroke="#00ff66" stroke-width="1.5" fill="none" opacity=".7"/>
+          <circle cx="30" cy="24" r="4" stroke="#00ff66" stroke-width="1" fill="none" opacity=".7"/>
+          <path d="M30 10 L30 14 M30 34 L30 38 M16 24 L20 24 M40 24 L44 24" stroke="#00ff66" stroke-width="1.5" opacity=".7"/>
+          <rect x="22" y="38" width="4" height="5" rx="1" fill="#00ff66" opacity=".7"/>
+          <rect x="28" y="38" width="4" height="5" rx="1" fill="#00ff66" opacity=".7"/>
+          <rect x="34" y="38" width="4" height="5" rx="1" fill="#00ff66" opacity=".7"/>
+        </svg>
+        <div class="btn-label">0.1g</div>
       </button>
 
       <button class="btn btn-sm-light" id="btnLight" aria-label="Backlight">

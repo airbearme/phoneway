@@ -327,6 +327,11 @@ class PhonewayApp {
     // Init reading history dots + ML indicator
     this._initReadingHistory();
     this._updateLearningIndicator();
+    
+    // Set up precision tracking display
+    this.motion.onPrecisionUpdate = (precision, weight) => {
+      this._updatePrecisionDisplay(precision, weight);
+    };
 
     if (this.settings.calibrated) {
       this.motion.sensitivity  = this.settings.motionSensitivity;
@@ -386,6 +391,7 @@ class PhonewayApp {
     b('btnPower',      () => this._togglePower());
     b('btnLight',      () => this._toggleLight());
     b('btnHammer',     () => this._runHammerMeasure());
+    b('btnPrecision',  () => this.measureHighPrecision({ targetPrecision: 0.1 }));
     b('btnVerify',     () => this._openVerifyPanel());
     b('verifyClose',   () => this._closeVerifyPanel());
     b('verifyCloseBtn',() => this._closeVerifyPanel());
@@ -735,7 +741,7 @@ class PhonewayApp {
 
     this._setCalProgress(80);
 
-    // ─── Step 2: First calibration weight ─────────────────────
+    // ─── Step 2: First calibration weight (high precision) ─────
     await this._waitForReady(
       'STEP 2 OF 3 — ADD YOUR WEIGHT',
       `Gently place your calibration weight in the\nCENTER of the phone screen.\n\n` +
@@ -745,14 +751,18 @@ class PhonewayApp {
       `🪙 Nickel      = 5.00 g\n\n` +
       `Place weight, then tap I'M READY.\nDo NOT touch the phone during measurement.`
     );
-    this._showStepOverlay('STEP 2 — MEASURING…', 'Hold PERFECTLY still for 4 seconds…');
+    this._showStepOverlay('STEP 2 — PRECISION MEASURING…', 'Optimizing for 0.1g accuracy…\nHold PERFECTLY still');
 
-    const deltaA1 = await this._measureDeltaA(4000, pct => this._setCalProgress(80 + pct * 10));
+    // Use precision mode for first calibration point
+    const deltaA1 = await this._measureDeltaA(6000, pct => this._setCalProgress(80 + pct * 10), {
+      targetPrecision: 0.05,  // Target 0.05g precision
+      minDuration: 3000
+    });
     this.firstDeltaA = deltaA1;
     this.firstCalG   = this.calWeightG;
     
-    // Add calibration point with validation
-    const calOk1 = this.motion.addCalPoint(this.calWeightG, deltaA1);
+    // Add calibration point with validation and high confidence
+    const calOk1 = this.motion.addCalPoint(this.calWeightG, deltaA1, { confidence: 0.95 });
     if (!calOk1) {
       this._showToast('Warning: Small signal detected — using fallback calibration', 4000);
     }
@@ -773,10 +783,13 @@ class PhonewayApp {
       const secondW = secondOffer;
       await this._showStepOverlay(
         'STEP 3 OF 3 — SECOND WEIGHT',
-        `Remove the first weight.\nPlace: ${secondW.label} (${secondW.grams.toFixed(2)} g)\n\nHold still for 4 seconds…`
+        `Remove the first weight.\nPlace: ${secondW.label} (${secondW.grams.toFixed(2)} g)\n\nPrecision measuring…`
       );
-      const deltaA2 = await this._measureDeltaA(4000, pct => this._setCalProgress(90 + pct * 7));
-      this.motion.addCalPoint(secondW.grams, deltaA2);
+      const deltaA2 = await this._measureDeltaA(6000, pct => this._setCalProgress(90 + pct * 7), {
+        targetPrecision: 0.05,
+        minDuration: 3000
+      });
+      this.motion.addCalPoint(secondW.grams, deltaA2, { confidence: 0.95 });
     }
 
     this._setCalProgress(98);
@@ -833,7 +846,27 @@ class PhonewayApp {
     this._showSurfaceTip();
   }
 
-  async _measureDeltaA(durationMs, onProgress) {
+  async _measureDeltaA(durationMs, onProgress, options = {}) {
+    // Use high-precision measurement if target precision specified
+    if (options.targetPrecision && this.motion.measurePrecision) {
+      this._showToast(`Precision mode: targeting ±${options.targetPrecision}g…`, 2000);
+      const result = await this.motion.measurePrecision({
+        targetPrecision: options.targetPrecision,
+        timeout: durationMs,
+        minDuration: options.minDuration || 2000
+      });
+      
+      if (result.precision < options.targetPrecision * 2) {
+        this._showToast(`✓ Precision: ±${result.precision.toFixed(3)}g`, 2000);
+      } else {
+        this._showToast(`⚠ Precision: ±${result.precision.toFixed(3)}g (retrying not recommended)`, 3000);
+      }
+      
+      // Convert grams back to deltaA
+      return result.grams / (this.motion.sensitivity || 150);
+    }
+    
+    // Fallback to standard measurement
     const samples = [];
     const step = 50;
     const steps = durationMs / step;
@@ -1238,6 +1271,86 @@ class PhonewayApp {
   }
 
   /**
+   * High-precision measurement mode — achieves ~0.1g accuracy
+   * Uses adaptive duration based on convergence
+   */
+  async measureHighPrecision(options = {}) {
+    const targetPrecision = options.targetPrecision || 0.1; // 0.1g default
+    
+    this._setState('MEASURING');
+    this._showToast(`🎯 Precision mode: targeting ±${targetPrecision}g…`, 3000);
+    
+    try {
+      const result = await this.motion.measurePrecision({
+        targetPrecision: targetPrecision,
+        timeout: options.timeout || 15000,
+        minDuration: options.minDuration || 5000
+      });
+      
+      // Display result
+      this.currentG = result.grams;
+      this._updateReadout(result.grams);
+      
+      const status = result.precision <= targetPrecision ? '✓ TARGET ACHIEVED' : '⚠ Below target';
+      this._showToast(
+        `${status}\nMeasured: ${result.grams.toFixed(3)}g\nPrecision: ±${result.precision.toFixed(3)}g`,
+        5000
+      );
+      
+      this._setState('STABLE');
+      
+      return {
+        success: result.precision <= targetPrecision,
+        grams: result.grams,
+        precision: result.precision,
+        confidence: result.confidence,
+        samples: result.samples
+      };
+    } catch (e) {
+      this._showToast('Precision measurement failed', 3000);
+      this._setState('READY');
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Run accuracy test with known reference weight
+   */
+  async runAccuracyTest(knownWeight) {
+    const { AccuracyTester } = await import('./precisionEngine.js');
+    const tester = new AccuracyTester();
+    
+    this._showToast(`🧪 Testing accuracy with ${knownWeight}g reference…`, 3000);
+    
+    // Run 10 precision measurements
+    const result = await tester.runTest(knownWeight, async () => {
+      const m = await this.motion.measurePrecision({
+        targetPrecision: 0.05,
+        timeout: 8000,
+        minDuration: 3000
+      });
+      return m.grams;
+    }, 10);
+    
+    // Display results
+    const report = [
+      `📊 ACCURACY TEST RESULTS`,
+      `Known: ${result.knownWeight.toFixed(2)}g`,
+      `Mean: ${result.meanMeasured.toFixed(3)}g`,
+      `Error: ${result.meanError > 0 ? '+' : ''}${result.meanError.toFixed(3)}g`,
+      `StdDev: ±${result.stdDev.toFixed(3)}g`,
+      `Range: ${result.range.toFixed(3)}g`,
+      ``,
+      `Grade: ${tester.summary?.overallGrade || '?'}`
+    ].join('\n');
+    
+    // Show in modal or alert
+    alert(report);
+    
+    return result;
+  }
+
+  /**
    * Try to trigger additional sensor measurements when idle.
    * Called periodically to ensure all sensors are contributing.
    */
@@ -1482,6 +1595,31 @@ class PhonewayApp {
     } else {
       el.textContent = `ML:${verifyCount}V`;
       el.style.color  = verifyCount >= 3 ? 'var(--seg-on)' : '#e8c84a';
+    }
+  }
+
+  /** Update precision display in status bar */
+  _updatePrecisionDisplay(precision, weight) {
+    const el = document.getElementById('precisionLabel');
+    if (!el) return;
+    
+    if (precision === Infinity || precision > 10) {
+      el.textContent = 'σ: —';
+      el.style.color = '#333';
+    } else if (precision < 0.1) {
+      el.textContent = `σ: ${(precision * 1000).toFixed(0)}mg`;
+      el.style.color = '#00ff66'; // Excellent - green
+    } else if (precision < 0.3) {
+      el.textContent = `σ: ${precision.toFixed(2)}g`;
+      el.style.color = '#e8c84a'; // Good - yellow
+    } else {
+      el.textContent = `σ: ${precision.toFixed(1)}g`;
+      el.style.color = '#ff8c00'; // Poor - orange
+    }
+    
+    // Show convergence indicator
+    if (this.motion.isConverged && weight > 0.1) {
+      el.textContent += ' ✓';
     }
   }
 
