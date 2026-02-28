@@ -463,19 +463,57 @@
 </div>
 
 
-<!-- ── PWA Install Banner (Android Chrome) ───────────────── -->
+<!-- ── PWA Install Banner (All Platforms) ───────────────── -->
 <div id="installBanner">
+  <div class="install-icon">⚖️</div>
   <div class="install-text">
-    <div class="install-title">INSTALL PHONEWAY</div>
-    <div class="install-sub">Add to home screen — works offline, no app store</div>
+    <div class="install-title">📲 INSTALL PHONEWAY</div>
+    <div class="install-sub" id="installSubText">One-click install — Desktop icon — Works offline</div>
+    <div class="install-features">
+      <span>✓ 0.1g Precision</span>
+      <span>✓ No App Store</span>
+      <span>✓ Always Available</span>
+    </div>
   </div>
-  <button id="installBtn" class="install-button">INSTALL</button>
-  <button id="installDismiss" class="install-x">×</button>
+  <div class="install-actions">
+    <button id="installBtn" class="install-button">INSTALL NOW</button>
+    <button id="installDismiss" class="install-x">×</button>
+  </div>
+</div>
+
+<!-- ── Desktop Install Modal ─────────────────────────────── -->
+<div id="desktopInstallModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:10000; align-items:center; justify-content:center; padding:20px;">
+  <div style="background:#161616; border:2px solid var(--gold); border-radius:16px; padding:32px; max-width:420px; text-align:center; box-shadow:0 0 60px rgba(201,162,39,0.3);">
+    <div style="font-size:48px; margin-bottom:16px;">💻</div>
+    <div style="font-size:18px; font-weight:bold; color:var(--gold); letter-spacing:2px; margin-bottom:8px;">INSTALL ON DESKTOP</div>
+    <div style="font-size:12px; color:#888; line-height:1.6; margin-bottom:20px;">
+      Install Phoneway as a desktop app for one-click access.<br>
+      No browser tabs needed — launches like any app!
+    </div>
+    <div style="background:#0a0a0a; border-radius:8px; padding:16px; margin-bottom:20px; text-align:left;">
+      <div style="font-size:11px; color:#666; margin-bottom:12px; letter-spacing:1px;">INSTALL STEPS:</div>
+      <ol style="font-size:12px; color:#ccc; line-height:2; margin:0; padding-left:20px;">
+        <li>Click <strong style="color:var(--gold);">INSTALL NOW</strong> below</li>
+        <li>Click <strong style="color:var(--gold);">Install</strong> in the browser prompt</li>
+        <li>Find <strong style="color:var(--gold);">Phoneway</strong> on your desktop!</li>
+      </ol>
+    </div>
+    <div style="display:flex; gap:12px;">
+      <button id="desktopInstallBtn" style="flex:1; background:linear-gradient(135deg, #9a7000, #e8c84a); color:#000; border:none; padding:14px; border-radius:8px; font-weight:bold; cursor:pointer;">INSTALL NOW</button>
+      <button id="desktopInstallCancel" style="background:#333; color:#999; border:none; padding:14px 24px; border-radius:8px; cursor:pointer;">Later</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── iOS Safari Install Hint ───────────────────────────── -->
 <div id="iosHint">
-  Tap <strong>Share ⬆</strong> then <strong>Add to Home Screen</strong> to install
+  <div style="display:flex; align-items:center; gap:12px;">
+    <span>📲</span>
+    <div>
+      <strong style="color:var(--gold);">INSTALL PHONEWAY</strong><br>
+      <small>Tap <strong>Share ⬆</strong> then <strong>Add to Home Screen</strong></small>
+    </div>
+  </div>
   <button onclick="this.parentElement.style.display='none'" class="ios-close">×</button>
 </div>
 
@@ -551,23 +589,73 @@
 <script type="module" src="js/app.js"></script>
 
 <script>
-/* PWA install prompt — Android Chrome auto-shows after 2s */
+/* ═══════════════════════════════════════════════════════════════
+   PWA INSTALL — One-Click Desktop & Mobile Installation
+═══════════════════════════════════════════════════════════════ */
 let _dip = null;
+let _isDesktop = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
+// Detect platform and update install text
+const _platform = (() => {
+  if (/Windows/i.test(navigator.userAgent)) return 'windows';
+  if (/Mac/i.test(navigator.userAgent) && !/iPhone|iPad/i.test(navigator.userAgent)) return 'mac';
+  if (/Linux/i.test(navigator.userAgent)) return 'linux';
+  if (/Android/i.test(navigator.userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return 'ios';
+  return 'desktop';
+})();
+
+// Update install subtitle based on platform
+const _installSub = document.getElementById('installSubText');
+if (_installSub) {
+  const _platformText = {
+    windows: 'Install on Windows — Desktop shortcut — Works offline',
+    mac: 'Install on Mac — Dock icon — Works offline',
+    linux: 'Install on Linux — Desktop entry — Works offline',
+    android: 'Add to home screen — Works offline — No app store',
+    ios: 'Add to home screen — Works offline — No app store',
+    desktop: 'One-click install — Desktop icon — Works offline'
+  };
+  _installSub.textContent = _platformText[_platform] || _platformText.desktop;
+}
+
+// Handle install prompt
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   _dip = e;
-  const b = document.getElementById('installBanner');
-  if (b) b.classList.add('show');
+  
+  // Show desktop modal for desktop users, banner for mobile
+  if (_isDesktop && _platform !== 'android') {
+    setTimeout(() => {
+      const modal = document.getElementById('desktopInstallModal');
+      if (modal) modal.style.display = 'flex';
+    }, 1500);
+  } else {
+    const b = document.getElementById('installBanner');
+    if (b) b.classList.add('show');
+  }
 
-  // Auto-trigger native dialog after 2 seconds on first visit
+  // Auto-trigger on first visit (desktop only after longer delay)
   const shown = sessionStorage.getItem('installPromptShown');
   if (!shown) {
     sessionStorage.setItem('installPromptShown', '1');
-    setTimeout(() => { if (_dip) { _dip.prompt(); } }, 2000);
+    if (_isDesktop) {
+      // Desktop: show after user has explored a bit
+      setTimeout(() => {
+        if (_dip && !sessionStorage.getItem('installPromptAutoShown')) {
+          sessionStorage.setItem('installPromptAutoShown', '1');
+          const modal = document.getElementById('desktopInstallModal');
+          if (modal) modal.style.display = 'flex';
+        }
+      }, 8000);
+    } else {
+      // Mobile: quick prompt
+      setTimeout(() => { if (_dip) { _dip.prompt(); } }, 2000);
+    }
   }
 });
 
+// Mobile banner install button
 document.getElementById('installBtn')?.addEventListener('click', async () => {
   if (!_dip) return;
   _dip.prompt();
@@ -575,29 +663,102 @@ document.getElementById('installBtn')?.addEventListener('click', async () => {
   if (outcome === 'accepted') {
     document.getElementById('installBanner').classList.remove('show');
     if ('vibrate' in navigator) navigator.vibrate([30, 20, 100]);
+    _showInstallSuccess();
   }
   _dip = null;
+});
+
+// Desktop modal install button
+document.getElementById('desktopInstallBtn')?.addEventListener('click', async () => {
+  if (!_dip) {
+    // If no deferred prompt (already installed or not supported), show manual instructions
+    _showManualInstallInstructions();
+    return;
+  }
+  _dip.prompt();
+  const { outcome } = await _dip.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('desktopInstallModal').style.display = 'none';
+    document.getElementById('installBanner').classList.remove('show');
+    _showInstallSuccess();
+  }
+  _dip = null;
+});
+
+document.getElementById('desktopInstallCancel')?.addEventListener('click', () => {
+  document.getElementById('desktopInstallModal').style.display = 'none';
 });
 
 document.getElementById('installDismiss')?.addEventListener('click', () => {
   document.getElementById('installBanner').classList.remove('show');
 });
 
+// Success message
+function _showInstallSuccess() {
+  const toast = document.getElementById('toast');
+  if (toast) {
+    toast.textContent = _isDesktop ? 
+      '✓ Installed! Look for Phoneway on your desktop/dock' : 
+      '✓ Installed! Check your home screen';
+    toast.className = 'toast toast-show';
+    setTimeout(() => { toast.className = 'toast'; }, 4000);
+  }
+}
+
+// Manual install instructions for unsupported browsers
+function _showManualInstallInstructions() {
+  const modal = document.getElementById('desktopInstallModal');
+  if (modal) {
+    modal.innerHTML = `
+      <div style="background:#161616; border:2px solid var(--gold); border-radius:16px; padding:32px; max-width:420px; text-align:center;">
+        <div style="font-size:48px; margin-bottom:16px;">⚙️</div>
+        <div style="font-size:18px; font-weight:bold; color:var(--gold); margin-bottom:16px;">MANUAL INSTALL</div>
+        <div style="font-size:12px; color:#888; line-height:1.8; margin-bottom:20px; text-align:left;">
+          <p style="margin-bottom:12px;"><strong style="color:#ccc;">Chrome/Edge:</strong></p>
+          <ol style="margin-bottom:16px; padding-left:20px;">
+            <li>Click the <strong style="color:var(--gold);">⊕</strong> icon in the address bar</li>
+            <li>Click <strong style="color:var(--gold);">"Install Phoneway..."</strong></li>
+          </ol>
+          <p style="margin-bottom:12px;"><strong style="color:#ccc;">Safari (Mac):</strong></p>
+          <ol style="padding-left:20px;">
+            <li>Click <strong style="color:var(--gold);">Share</strong> in the toolbar</li>
+            <li>Select <strong style="color:var(--gold);">"Add to Dock"</strong></li>
+          </ol>
+        </div>
+        <button onclick="document.getElementById('desktopInstallModal').style.display='none'" style="background:var(--gold); color:#000; border:none; padding:12px 32px; border-radius:8px; font-weight:bold; cursor:pointer;">GOT IT</button>
+      </div>
+    `;
+    modal.style.display = 'flex';
+  }
+}
+
+// Installed event
 window.addEventListener('appinstalled', () => {
   document.getElementById('installBanner')?.classList.remove('show');
+  document.getElementById('desktopInstallModal')?.style.display = 'none';
   document.getElementById('iosHint')?.remove();
+  _showInstallSuccess();
   if ('vibrate' in navigator) navigator.vibrate([50, 30, 50, 30, 200]);
 });
 
-// iOS Safari
+// iOS Safari detection
 const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
 if (isIos && isSafari && !isStandalone) {
   setTimeout(() => {
     const h = document.getElementById('iosHint');
     if (h) h.classList.add('show');
   }, 3500);
+}
+
+// Check if already installed (for returning users)
+if (isStandalone) {
+  // Already installed - hide all prompts
+  document.getElementById('installBanner')?.remove();
+  document.getElementById('desktopInstallModal')?.remove();
+  document.getElementById('iosHint')?.remove();
 }
 </script>
 

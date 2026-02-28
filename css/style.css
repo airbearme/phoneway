@@ -1687,3 +1687,227 @@ html, body {
   transform: translateX(-50%);
   transition: left 0.5s;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ENHANCED PWA INSTALL STYLES — One-Click Desktop Installation
+═══════════════════════════════════════════════════════════════ */
+
+/* Install Banner */
+#installBanner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+  border-top: 2px solid var(--gold);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 1000;
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 -4px 30px rgba(0,0,0,0.8), 0 -2px 10px rgba(201,162,39,0.3);
+}
+
+#installBanner.show {
+  transform: translateY(0);
+}
+
+.install-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.install-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.install-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--gold);
+  margin-bottom: 2px;
+  text-shadow: 0 0 10px rgba(201,162,39,0.5);
+}
+
+.install-sub {
+  font-size: 10px;
+  color: #888;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.install-features {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.install-features span {
+  font-size: 9px;
+  color: var(--seg-on);
+  background: rgba(57,255,20,0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(57,255,20,0.3);
+  white-space: nowrap;
+}
+
+.install-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.install-button {
+  background: linear-gradient(135deg, #9a7000 0%, #e8c84a 50%, #c9a227 100%);
+  color: #000;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(201,162,39,0.5);
+  transition: transform 0.1s, box-shadow 0.1s;
+  white-space: nowrap;
+}
+
+.install-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(201,162,39,0.6);
+}
+
+.install-button:active {
+  transform: translateY(1px);
+}
+
+.install-x {
+  background: transparent;
+  border: none;
+  color: #666;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.install-x:hover {
+  color: #fff;
+}
+
+/* iOS Hint */
+#iosHint {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(200%);
+  background: rgba(0,0,0,0.95);
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  padding: 16px 20px;
+  font-size: 12px;
+  color: #ccc;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.8), 0 0 20px rgba(201,162,39,0.2);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 90vw;
+}
+
+#iosHint.show {
+  transform: translateX(-50%) translateY(0);
+}
+
+#iosHint strong {
+  color: var(--gold);
+}
+
+.ios-close {
+  background: transparent;
+  border: none;
+  color: #666;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.2s;
+}
+
+.ios-close:hover {
+  color: #fff;
+}
+
+/* Desktop Install Modal */
+#desktopInstallModal {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Responsive Install Banner */
+@media (max-width: 480px) {
+  #installBanner {
+    flex-direction: column;
+    text-align: center;
+    padding: 16px;
+  }
+  
+  .install-icon {
+    font-size: 28px;
+  }
+  
+  .install-features {
+    justify-content: center;
+  }
+  
+  .install-actions {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .install-button {
+    flex: 1;
+    max-width: 200px;
+  }
+}
+
+/* Standalone Mode (Installed) Adjustments */
+@media (display-mode: standalone) {
+  #installBanner,
+  #desktopInstallModal,
+  #iosHint {
+    display: none !important;
+  }
+  
+  /* Add app-like header padding for notched devices */
+  #header {
+    padding-top: env(safe-area-inset-top, 10px);
+  }
+  
+  #footer {
+    padding-bottom: env(safe-area-inset-bottom, 6px);
+  }
+}
+
+/* Window Controls Overlay (Desktop PWA) */
+@supports (height: 100dvh) {
+  #app {
+    height: 100dvh;
+  }
+}
+
+/* Hide install elements when already installed */
+.app-installed #installBanner,
+.app-installed #desktopInstallModal,
+.app-installed #iosHint {
+  display: none !important;
+}

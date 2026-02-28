@@ -1,42 +1,118 @@
 {
-  "name": "Phoneway Precision Scale",
+  "id": "com.phoneway.scale",
+  "name": "Phoneway Ultra-Precision Scale",
   "short_name": "Phoneway",
-  "description": "High-accuracy digital scale using smartphone sensor fusion & Kalman filtering",
+  "description": "Professional-grade 0.1g accuracy scale using 15-sensor fusion, neural networks, and machine learning. Self-calibrating and continuously improving.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
   "orientation": "portrait",
   "background_color": "#0a0a0a",
   "theme_color": "#c9a227",
-  "categories": ["utilities", "tools"],
+  "categories": ["utilities", "tools", "productivity"],
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "icons": [
     {
-      "src": "icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ],
   "shortcuts": [
     {
       "name": "Quick Weigh",
-      "url": "./?mode=fusion",
-      "description": "Start weighing immediately"
+      "short_name": "Weigh",
+      "url": "./?mode=ultra",
+      "description": "Start ultra-precision weighing immediately",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "Calibrate",
+      "short_name": "Calibrate",
       "url": "./?cal=true",
-      "description": "Calibrate with known weight"
+      "description": "Calibrate with known weight for maximum accuracy",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Accuracy Report",
+      "short_name": "Stats",
+      "url": "./?view=stats",
+      "description": "View accuracy metrics and ML training status",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     }
   ],
-  "screenshots": [],
+  "screenshots": [
+    {
+      "src": "screenshots/scale.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Phoneway precision scale interface"
+    },
+    {
+      "src": "screenshots/desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Phoneway desktop mode"
+    }
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "handle_links": "preferred",
   "lang": "en-US",
   "dir": "ltr"
 }
