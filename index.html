@@ -68,10 +68,11 @@
   <!-- ── Status Bar ─────────────────────────────────────────── -->
   <div id="status-bar">
     <span id="statusText">IDLE</span>
-    <span id="modeLabel">FUSION</span>
+    <span id="modeLabel">ULTRA</span>
     <span id="precisionLabel">σ: —</span>
     <span id="mlLabel">ML: —</span>
     <span id="surfaceLabel">SURFACE: —</span>
+    <span id="gradeLabel">GRADE: —</span>
   </div>
 
   <!-- ── Surface / Touch Pad ────────────────────────────────── -->
@@ -198,8 +199,8 @@
       </button>
     </div>
 
-    <!-- Bottom row -->
-    <div class="btn-row-3">
+    <!-- Bottom row (5 buttons) -->
+    <div class="btn-row-3" style="grid-template-columns: repeat(5, 1fr);">
       <!-- VERIFY — known-weight accuracy check (green skull) -->
       <button class="btn btn-verify" id="btnVerify" aria-label="Verify against known weight">
         <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
@@ -260,6 +261,21 @@
         </svg>
         <div class="btn-label">LIGHT</div>
       </button>
+
+      <!-- STATS button -->
+      <button class="btn btn-stats" id="btnStats" aria-label="Accuracy Report" title="View Accuracy Report">
+        <svg class="skull-icon" viewBox="0 0 60 60" fill="none" style="width:22px;height:22px">
+          <ellipse cx="30" cy="26" rx="20" ry="18" fill="#0a1a0a" opacity=".75"/>
+          <circle class="eye-left"  cx="22" cy="24" r="6.5" style="fill:#e8c84a"/>
+          <circle class="eye-right" cx="38" cy="24" r="6.5" style="fill:#e8c84a"/>
+          <!-- Chart bars -->
+          <rect x="18" y="32" width="4" height="8" rx="1" fill="#e8c84a" opacity=".8"/>
+          <rect x="24" y="28" width="4" height="12" rx="1" fill="#e8c84a" opacity=".8"/>
+          <rect x="30" y="24" width="4" height="16" rx="1" fill="#e8c84a" opacity=".8"/>
+          <rect x="36" y="30" width="4" height="10" rx="1" fill="#e8c84a" opacity=".8"/>
+        </svg>
+        <div class="btn-label">STATS</div>
+      </button>
     </div>
 
   </div>
@@ -267,7 +283,7 @@
   <!-- ── Footer ─────────────────────────────────────────────── -->
   <div id="footer">
     <div class="footer-stack">
-      <div class="footer-text">PHONEWAY v2 · 8-SENSOR FUSION · ADAPTIVE KALMAN</div>
+      <div class="footer-text">PHONEWAY v3 · 15-SENSOR ULTRA · NN-ENHANCED · 0.1g TARGET</div>
       <div class="footer-credit">CREATED BY <span class="credit-name">STEVE B</span> AKA <span class="credit-handle">CODEN809</span></div>
     </div>
     <div class="footer-gems">
@@ -466,6 +482,70 @@
 <!-- ── Toast ─────────────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
 
+
+<!-- ═══════════════════════════════════════════════════════════
+     ACCURACY REPORT PANEL
+════════════════════════════════════════════════════════════ -->
+<div id="accuracyPanel" class="verify-panel" style="display:none; max-height: 80vh; overflow-y: auto;">
+  <div class="verify-header">
+    <div>
+      <div class="verify-title">ACCURACY REPORT</div>
+      <div class="verify-sub">ML-ENHANCED CALIBRATION STATUS</div>
+    </div>
+    <button class="verify-close" id="accuracyClose">×</button>
+  </div>
+  
+  <div style="padding: 16px; font-size: 11px; line-height: 1.6;">
+    <!-- Grade Display -->
+    <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, #1a1a1a, #0a0a0a); border-radius: 8px; border: 1px solid #333;">
+      <div style="font-size: 10px; color: #888; letter-spacing: 2px; margin-bottom: 8px;">CURRENT GRADE</div>
+      <div id="accGradeDisplay" style="font-size: 48px; font-weight: bold; color: var(--seg-on); text-shadow: 0 0 20px rgba(232,200,74,0.5);">—</div>
+      <div id="accGradeDesc" style="font-size: 12px; color: #aaa; margin-top: 4px;">Calibrate to achieve accuracy</div>
+    </div>
+    
+    <!-- Stats Grid -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">PRECISION</div>
+        <div id="accPrecision" style="color: #e8c84a; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">SYSTEMATIC ERROR</div>
+        <div id="accSystematic" style="color: #e8c84a; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">ML SAMPLES</div>
+        <div id="accMLSamples" style="color: #39ff14; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+      <div style="background: #1a1a1a; padding: 12px; border-radius: 6px;">
+        <div style="color: #666; font-size: 9px; letter-spacing: 1px;">VERIFICATIONS</div>
+        <div id="accVerifications" style="color: #44aaff; font-size: 16px; font-weight: bold;">—</div>
+      </div>
+    </div>
+    
+    <!-- Recommendations -->
+    <div id="accRecommendations" style="background: #0a1a0a; border: 1px solid #1a3a1a; border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+      <div style="color: #39ff14; font-size: 10px; letter-spacing: 1px; margin-bottom: 8px;">RECOMMENDATIONS</div>
+      <div id="accRecList" style="color: #aaa;">Complete calibration to receive recommendations</div>
+    </div>
+    
+    <!-- Environmental Status -->
+    <div style="background: #1a1a1a; border-radius: 6px; padding: 12px;">
+      <div style="color: #666; font-size: 10px; letter-spacing: 1px; margin-bottom: 8px;">ENVIRONMENTAL STATUS</div>
+      <div id="accEnvStatus" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 10px;">
+        <div>Barometer: <span id="envBaro">—</span></div>
+        <div>Battery: <span id="envBatt">—</span></div>
+        <div>Orientation: <span id="envOrient">—</span></div>
+        <div>Thermal: <span id="envThermal">—</span></div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="verify-btns">
+    <button class="modal-btn modal-btn-primary" id="accExportBtn">📊 EXPORT DATA</button>
+    <button class="modal-btn modal-btn-secondary" id="accCloseBtn">CLOSE</button>
+  </div>
+</div>
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
 <script type="module" src="js/app.js"></script>

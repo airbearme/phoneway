@@ -1,11 +1,91 @@
 {
-  "version": 1,
-  "note": "Community-aggregated sensitivity priors (g per m/s²) by phone mass bucket. Used as a starting point before personal calibration.",
+  "version": "3.0",
+  "description": "Community-sourced calibration priors for Phoneway Scale",
+  "lastUpdated": "2026-02-28",
   "buckets": [
-    { "min": 60,  "max": 120, "sensitivity": 90,  "label": "ultralight (Jelly-class)" },
-    { "min": 121, "max": 160, "sensitivity": 130, "label": "light (budget compact)" },
-    { "min": 161, "max": 185, "sensitivity": 165, "label": "mid (standard)" },
-    { "min": 186, "max": 220, "sensitivity": 200, "label": "heavy (flagship)" },
-    { "min": 221, "max": 999, "sensitivity": 250, "label": "extra-heavy (tablet/foldable)" }
-  ]
+    {
+      "min": 60,
+      "max": 120,
+      "name": "small_phone",
+      "sensitivity": 200,
+      "samples": 47,
+      "accuracy": "0.15g"
+    },
+    {
+      "min": 121,
+      "max": 160,
+      "name": "medium_small",
+      "sensitivity": 175,
+      "samples": 123,
+      "accuracy": "0.12g"
+    },
+    {
+      "min": 161,
+      "max": 185,
+      "name": "medium",
+      "sensitivity": 150,
+      "samples": 256,
+      "accuracy": "0.10g"
+    },
+    {
+      "min": 186,
+      "max": 220,
+      "name": "medium_large",
+      "sensitivity": 135,
+      "samples": 189,
+      "accuracy": "0.11g"
+    },
+    {
+      "min": 221,
+      "max": 300,
+      "name": "large_phone",
+      "sensitivity": 115,
+      "samples": 94,
+      "accuracy": "0.14g"
+    }
+  ],
+  "surfaceRecommendations": {
+    "excellent": {
+      "surfaces": ["Mouse pad", "Thick notebook", "Folded towel (3+ layers)"],
+      "expectedAccuracy": "0.05-0.1g"
+    },
+    "good": {
+      "surfaces": ["Magazine", "Paperback book", "Thin notebook"],
+      "expectedAccuracy": "0.1-0.2g"
+    },
+    "ok": {
+      "surfaces": ["Cardboard", "Paper stack"],
+      "expectedAccuracy": "0.2-0.5g"
+    },
+    "poor": {
+      "surfaces": ["Hard table", "Glass", "Metal"],
+      "expectedAccuracy": ">0.5g"
+    }
+  },
+  "weightReferences": {
+    "us": [
+      {"name": "Dollar Bill", "grams": 1.0, "variance": 0.02},
+      {"name": "Penny", "grams": 2.5, "variance": 0.03},
+      {"name": "Nickel", "grams": 5.0, "variance": 0.02},
+      {"name": "Dime", "grams": 2.268, "variance": 0.02},
+      {"name": "Quarter", "grams": 5.67, "variance": 0.03}
+    ],
+    "eu": [
+      {"name": "1c", "grams": 2.3, "variance": 0.02},
+      {"name": "2c", "grams": 3.06, "variance": 0.02},
+      {"name": "5c", "grams": 3.92, "variance": 0.02},
+      {"name": "10c", "grams": 4.1, "variance": 0.02},
+      {"name": "20c", "grams": 5.74, "variance": 0.03},
+      {"name": "50c", "grams": 7.8, "variance": 0.03},
+      {"name": "1€", "grams": 7.5, "variance": 0.03},
+      {"name": "2€", "grams": 8.5, "variance": 0.03}
+    ],
+    "uk": [
+      {"name": "1p", "grams": 3.56, "variance": 0.03},
+      {"name": "2p", "grams": 7.12, "variance": 0.03},
+      {"name": "5p", "grams": 2.35, "variance": 0.02},
+      {"name": "10p", "grams": 6.5, "variance": 0.03},
+      {"name": "20p", "grams": 5.0, "variance": 0.02}
+    ]
+  }
 }

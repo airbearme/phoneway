@@ -1445,3 +1445,245 @@ html, body {
   transition: color 0.15s;
 }
 .modal-btn-link:hover { color: #ff4444; text-decoration-color: #ff4444; }
+
+/* ═══════════════════════════════════════════════════════════════
+   Phoneway v3.0 Additions — Accuracy Report & Stats Button
+═══════════════════════════════════════════════════════════════ */
+
+/* Stats Button */
+#btnStats {
+  background: linear-gradient(135deg, #1a3a1a 0%, #2d5a2d 40%, #4a8a4a 50%, #2d5a2d 60%, #1a3a1a 100%);
+  box-shadow: 0 2px 8px rgba(57,255,20,.4), 0 0 20px rgba(57,255,20,.2), inset 0 1px 1px rgba(255,255,255,.2);
+}
+#btnStats .btn-label {
+  color: #afa;
+  font-size: 6px;
+}
+#btnStats .eye-left,
+#btnStats .eye-right {
+  fill: #e8c84a;
+}
+
+/* Grade Label in Status Bar */
+#gradeLabel {
+  color: var(--seg-on);
+  font-weight: bold;
+}
+
+/* Accuracy Report Panel */
+#accuracyPanel {
+  background: #0a0a0a;
+}
+
+#accuracyPanel .verify-title {
+  font-size: 12px;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, #9a7000 0%, #e8c84a 35%, #f5d87a 50%, #e8c84a 65%, #7a5400 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Grade display colors */
+.grade-A-plus { color: #00ff66 !important; text-shadow: 0 0 20px rgba(0,255,102,0.8) !important; }
+.grade-A { color: #39ff14 !important; text-shadow: 0 0 15px rgba(57,255,20,0.6) !important; }
+.grade-B-plus { color: #e8c84a !important; text-shadow: 0 0 10px rgba(232,200,74,0.5) !important; }
+.grade-B { color: #ffcc00 !important; text-shadow: 0 0 8px rgba(255,204,0,0.4) !important; }
+.grade-C { color: #ff8c00 !important; text-shadow: 0 0 8px rgba(255,140,0,0.4) !important; }
+.grade-D { color: #ff4444 !important; text-shadow: 0 0 8px rgba(255,68,68,0.4) !important; }
+.grade-untested { color: #666666 !important; }
+
+/* Environmental status indicators */
+.env-good { color: #39ff14; }
+.env-warn { color: #ff8c00; }
+.env-bad { color: #ff4444; }
+.env-na { color: #555; }
+
+/* Button row 3 with 5 buttons */
+.btn-row-3 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.btn-row-3 .btn {
+  padding: 6px 2px 5px;
+}
+
+.btn-row-3 .skull-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.btn-row-3 .btn-label {
+  font-size: 5px;
+  letter-spacing: 1px;
+}
+
+/* Scrollable panel adjustments */
+.verify-panel {
+  scrollbar-width: thin;
+  scrollbar-color: #333 #0a0a0a;
+}
+
+.verify-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.verify-panel::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+.verify-panel::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 2px;
+}
+
+.verify-panel::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Toast notification enhancements */
+.toast {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.95);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #ccc;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+  max-width: 320px;
+  text-align: center;
+  white-space: pre-line;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.8), 0 0 20px rgba(201,162,39,0.2);
+}
+
+.toast-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+/* Reading dots */
+#readingHistory {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+  height: 8px;
+}
+
+.reading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #222;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.reading-dot.dot-good {
+  background: var(--seg-on);
+  box-shadow: 0 0 4px var(--seg-on);
+}
+
+.reading-dot.dot-mid {
+  background: #e8c84a;
+  box-shadow: 0 0 4px rgba(232,200,74,0.5);
+}
+
+.reading-dot.dot-low {
+  background: #ff4444;
+  box-shadow: 0 0 4px rgba(255,68,68,0.5);
+}
+
+/* LED cyan for ultra mode */
+.led-cyan {
+  background: radial-gradient(circle at 30% 30%, #00ffff, #0088aa) !important;
+  box-shadow: 0 0 8px #00ffff, 0 0 16px rgba(0,255,255,0.6) !important;
+}
+
+/* Second calibration toast */
+.second-cal-toast {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -40%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Precision measurement progress */
+.precision-progress {
+  width: 100%;
+  height: 4px;
+  background: #111;
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.precision-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #00ff66, #39ff14);
+  border-radius: 2px;
+  transition: width 0.3s;
+  box-shadow: 0 0 8px rgba(57,255,20,0.6);
+}
+
+/* Sensor activity indicators in accuracy panel */
+.sensor-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.sensor-status-item {
+  text-align: center;
+  padding: 8px;
+  background: #111;
+  border-radius: 4px;
+  font-size: 9px;
+}
+
+.sensor-status-item.active {
+  border: 1px solid var(--seg-on);
+}
+
+.sensor-status-item.inactive {
+  opacity: 0.5;
+}
+
+/* Calibration quality meter */
+.quality-meter {
+  width: 100%;
+  height: 20px;
+  background: linear-gradient(90deg, #ff4444 0%, #ff8c00 25%, #e8c84a 50%, #39ff14 75%, #00ff66 100%);
+  border-radius: 10px;
+  position: relative;
+  margin: 8px 0;
+}
+
+.quality-marker {
+  position: absolute;
+  top: -5px;
+  width: 4px;
+  height: 30px;
+  background: #fff;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(255,255,255,0.8);
+  transform: translateX(-50%);
+  transition: left 0.5s;
+}
