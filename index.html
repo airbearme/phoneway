@@ -7,11 +7,39 @@
   <meta name="apple-mobile-web-app-capable"          content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title"            content="Phoneway"/>
-  <meta name="theme-color"                           content="#c9a227"/>
-  <title>Phoneway — Precision Scale</title>
-  <link rel="manifest"          href="manifest.json"/>
+  <meta name="theme-color"                           content="#00d4ff"/>
+  <title>Phoneway v3.1 — Ultra-Precision Scale</title>
+  <link rel="manifest"          href="manifest.json?v=3.1.0"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css"/>
+  <link rel="stylesheet"        href="css/style.css?v=3.1.0"/>
+<script>
+// Version check and auto-update
+const APP_VERSION = '3.1.0';
+const storedVersion = localStorage.getItem('phoneway_version');
+if (storedVersion && storedVersion !== APP_VERSION) {
+  if ('caches' in window) {
+    caches.keys().then(keys => {
+      keys.forEach(key => caches.delete(key));
+    });
+  }
+  localStorage.setItem('phoneway_version', APP_VERSION);
+  console.log([Phoneway]
+<script>
+// Version check and auto-update
+const APP_VERSION = '3.1.0';
+const storedVersion = localStorage.getItem('phoneway_version');
+if (storedVersion && storedVersion !== APP_VERSION) {
+  if ('caches' in window) {
+    caches.keys().then(keys => {
+      keys.forEach(key => caches.delete(key));
+    });
+  }
+  localStorage.setItem('phoneway_version', APP_VERSION);
+  console.log('[Phoneway] Updated to version', APP_VERSION);
+} else if (!storedVersion) {
+  localStorage.setItem('phoneway_version', APP_VERSION);
+}
+</script>
 </head>
 <body>
 

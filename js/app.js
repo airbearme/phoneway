@@ -46,6 +46,11 @@ import { AdvancedFusionEngine } from './advancedFusion.js';
 import { EnvironmentalCompensator } from './environmentalSensors.js';
 import { UltraPrecisionEngine } from './ultraPrecision.js';
 import { globalErrorLogger } from '../data/error-logger.js';
+// NEW: Advanced adaptive signal processing
+import { AdaptiveSignalProcessor, ContinuousKalmanFilter } from './adaptiveFilter.js';
+
+// NEW: Predictive calibration with ML
+import { CalibrationPredictor, NonlinearCalibration, AutoCalibrator } from './predictiveCalibration.js';
 
 // NEW: Quantum-inspired fusion and thermal compensation
 import { QuantumFusionEngine, HypothesisSpace } from './quantumFusion.js';

@@ -1,18 +1,29 @@
 {
-  "id": "com.phoneway.scale",
-  "name": "Phoneway Ultra-Precision Scale",
+  "id": "com.phoneway.scale.v3",
+  "name": "Phoneway Ultra-Precision Scale v3.1",
   "short_name": "Phoneway",
-  "description": "Professional-grade 0.1g accuracy scale using 15-sensor fusion, neural networks, and machine learning. Self-calibrating and continuously improving.",
-  "start_url": "./",
+  "description": "Professional-grade 0.1g accuracy scale using quantum-inspired 15-sensor fusion, neural networks, and machine learning. Self-calibrating with thermal compensation and laboratory-grade verification.",
+  "version": "3.1.0",
+  "start_url": "./?v=3.1.0",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "portrait",
-  "background_color": "#0a0a0a",
-  "theme_color": "#c9a227",
+  "background_color": "#0d0d0f",
+  "theme_color": "#00d4ff",
   "categories": ["utilities", "tools", "productivity"],
   "launch_handler": {
     "client_mode": ["navigate-existing", "auto"]
+  },
+  "icon_override": {
+    "windows": {
+      "src": "icons/icon-windows.ico",
+      "sizes": "256x256"
+    },
+    "macos": {
+      "src": "icons/icon-mac.icns",
+      "sizes": "512x512"
+    }
   },
   "icons": [
     {
@@ -72,24 +83,31 @@
   ],
   "shortcuts": [
     {
-      "name": "Quick Weigh",
+      "name": "⚡ Quick Weigh",
       "short_name": "Weigh",
-      "url": "./?mode=ultra",
+      "url": "./?mode=ultra&v=3.1.0",
       "description": "Start ultra-precision weighing immediately",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
-      "name": "Calibrate",
+      "name": "⚖️ Calibrate",
       "short_name": "Calibrate",
-      "url": "./?cal=true",
+      "url": "./?cal=true&v=3.1.0",
       "description": "Calibrate with known weight for maximum accuracy",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
-      "name": "Accuracy Report",
+      "name": "📊 Accuracy Report",
       "short_name": "Stats",
-      "url": "./?view=stats",
+      "url": "./?view=stats&v=3.1.0",
       "description": "View accuracy metrics and ML training status",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "🔬 Verify",
+      "short_name": "Verify",
+      "url": "./?verify=true&v=3.1.0",
+      "description": "Verify accuracy with known reference weight",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     }
   ],
@@ -99,14 +117,14 @@
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Phoneway precision scale interface"
+      "label": "Phoneway precision scale with sapphire crystal display"
     },
     {
       "src": "screenshots/desktop.png",
       "sizes": "1920x1080",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Phoneway desktop mode"
+      "label": "Phoneway desktop PWA mode"
     }
   ],
   "edge_side_panel": {
@@ -114,5 +132,15 @@
   },
   "handle_links": "preferred",
   "lang": "en-US",
-  "dir": "ltr"
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "widgets": [
+    {
+      "name": "Quick Weight",
+      "short_name": "Weight",
+      "description": "Quick access to current weight reading",
+      "screenshot": "screenshots/widget.png",
+      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ]
 }
