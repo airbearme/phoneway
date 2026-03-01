@@ -57,6 +57,9 @@ import { QuantumFusionEngine, HypothesisSpace } from './quantumFusion.js';
 import { RealTimeCompensator } from './thermalCompensation.js';
 import { AdvancedVerificationEngine, NISTReferenceDatabase } from './advancedVerification.js';
 
+// Crowd-sourced telemetry — anonymous, privacy-first
+import { telemetry } from './telemetry.js';
+
 /* ── Known calibration weights ────────────────────────────── */
 export const CAL_WEIGHTS = [
   { label: 'Dollar Bill',    grams: 1.00, icon: '💵', tip: 'Any US paper bill — any denomination equals exactly 1 gram' },
@@ -242,6 +245,29 @@ class PhonewayApp {
     // Load persisted data
     this.verifier.loadSaved();
     this.verifier.loadHistory();
+
+    // Report device capabilities anonymously — helps improve accuracy for all users
+    telemetry.logCapabilities({
+      calibrated: !!this.settings.calibrated,
+      hasCalPoints: (this.settings.calPoints?.length || 0),
+    });
+
+    // Fetch global crowd-sourced stats (non-blocking; seeds sensitivity if uncalibrated)
+    telemetry.fetchGlobalStats().then(stats => {
+      if (stats && !this.settings.calibrated) {
+        const sq = this.settings.surfaceQuality || 'ok';
+        const crowdSens = stats.sensMap?.[sq];
+        if (crowdSens && crowdSens > 0) {
+          this.motion.sensitivity = crowdSens;
+          this._showToast(`Global prior: ${crowdSens.toFixed(0)} g/ms⁻² (${stats.verifyCount || 0} devices)`, 3500);
+        }
+        const passRate = stats.passRate;
+        if (passRate !== null && stats.verifyCount > 10) {
+          const pct = Math.round(passRate * 100);
+          this._showToast(`Community accuracy: ${pct}% pass rate across all devices`, 3000);
+        }
+      }
+    }).catch(() => {});
 
     // Apply community priors
     await this.learn.priors.load().catch(() => {});
@@ -610,22 +636,27 @@ class PhonewayApp {
     try {
       await this.motion.request();
       this.motion.start();
-    } catch {
+    } catch (e) {
       this._showToast('Motion access denied — accuracy reduced', 3500);
+      telemetry.logPermissionDenied('devicemotion');
     }
 
     this.audio.onReady = () => {
       this.ledAudio.on('green');
       this._updateSensorBar('audioBar', 0.3, 1);
     };
-    this.audio.onError = () => {
+    this.audio.onError = (err) => {
       this.ledAudio.on('red');
       this._showToast('Mic unavailable — audio mode disabled', 2500);
+      telemetry.logSensorError('microphone', err?.message || 'unavailable');
     };
-    await this.audio.init().catch(() => {});
+    await this.audio.init().catch(e => telemetry.logSensorError('microphone', e?.message));
     if (this.audio.supported) this.audio.start();
 
-    const camOk = await this.camera.start().catch(() => false);
+    const camOk = await this.camera.start().catch(e => {
+      telemetry.logSensorError('camera', e?.message || 'unavailable');
+      return false;
+    });
     if (camOk) {
       this.ledCamera?.on('green');
       this._showToast('Camera sensor active', 2000);
@@ -926,6 +957,15 @@ class PhonewayApp {
     this.vertAccel.setBaseline(this.motion.raw?.az ?? 9.81);
 
     this._saveSettings();
+
+    // Report calibration quality to crowd-sourced telemetry
+    telemetry.logCalibration(
+      this.motion.sensitivity,
+      this.motion.surfaceQuality,
+      this.motion.calPoints?.length || 0,
+      this.hammer.phoneMass || 170
+    );
+
     this._setCalProgress(100);
 
     const sq = this.motion.surfaceQuality;
@@ -1469,7 +1509,7 @@ class PhonewayApp {
       else this.accuracyGrade = 'D';
       this._updateGradeDisplay();
       
-      // Log to global error logger
+      // Log to global error logger (local persistence)
       globalErrorLogger.logError({
         expectedGrams: this._activeRefW.grams,
         measuredGrams: measured,
@@ -1483,6 +1523,15 @@ class PhonewayApp {
         activeSensors: Object.keys(sensorReadings).filter(k => sensorReadings[k] > 0),
         fusionConfidence: accuracy / 100
       });
+
+      // Send anonymised verify result to crowd-sourced telemetry
+      telemetry.logVerify(
+        this._activeRefW.grams,
+        measured,
+        (error / (this._activeRefW.grams || 1)) * 100,
+        pass ? 'PASS' : 'FAIL',
+        this.accuracyGrade
+      );
       
       // Train ensemble calibrator
       const learnResult = this.ensembleCal.learn(measured, this._activeRefW.grams, sensorReadings, {
@@ -1696,16 +1745,25 @@ class PhonewayApp {
       calScore       * 0.15 +
       surfScore      * 0.10;
 
+    // Graduated consensus bonus — rewards multi-sensor agreement proportionally.
+    // Threshold tightened to 12% for ±0.1g target (was 20%).
     let consensusBonus = 0;
     if (correctedG > 0.1) {
       const active = [...this.fusion.sources.values()]
         .filter(s => s.confidence > 0.2 && s.estimate > 0.05)
         .map(s => s.estimate);
-      if (active.length >= 3) {
-        const sorted = [...active].sort((a, b) => a - b);
-        const median = sorted[Math.floor(sorted.length / 2)];
-        const agree  = active.filter(v => Math.abs(v - median) / (median || 1) < 0.20);
-        if (agree.length >= 3) consensusBonus = 0.05;
+      if (active.length >= 2) {
+        const sorted     = [...active].sort((a, b) => a - b);
+        const median     = sorted[Math.floor(sorted.length / 2)];
+        const tightAgree = active.filter(v => Math.abs(v - median) / (median || 1) < 0.12);
+        const looseAgree = active.filter(v => Math.abs(v - median) / (median || 1) < 0.25);
+        const tightRatio = tightAgree.length / active.length;
+        const looseRatio = looseAgree.length / active.length;
+        // Graduated: up to +10% for near-perfect multi-sensor lock
+        if      (tightRatio >= 0.80 && active.length >= 3) consensusBonus = 0.10;
+        else if (tightRatio >= 0.60 && active.length >= 3) consensusBonus = 0.07;
+        else if (looseRatio >= 0.80 && active.length >= 3) consensusBonus = 0.05;
+        else if (looseRatio >= 0.60 || active.length >= 2) consensusBonus = 0.02;
       }
     }
 
@@ -1728,6 +1786,8 @@ class PhonewayApp {
         this.learn.logReading(correctedG, accPct, activeSensors);
         this._pushReadingHistory(correctedG, accPct);
         this._updateLearningIndicator();
+        // Report stable reading stats (bucketed weight range — no actual value)
+        telemetry.logStableReading(correctedG, activeSensors, accPct);
       }
     } else {
       if (this.state !== 'READY') this._setState('READY');

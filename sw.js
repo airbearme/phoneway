@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v3.1-premium';
+const CACHE = 'phoneway-v3.2-telemetry';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -38,6 +38,7 @@ const ASSETS = [
   BASE + 'js/advancedVerification.js',
   BASE + 'data/community-priors.json',
   BASE + 'data/error-logger.js',
+  BASE + 'js/telemetry.js',
   BASE + 'js/app.js',
   BASE + 'icons/icon.svg',
   BASE + 'icons/icon-192.png',
@@ -67,7 +68,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   
-  // Network-first for API calls, cache-first for assets
+  // Network-first for API calls (telemetry, stats) — never cache these
   const isAPI = e.request.url.includes('/api/') || e.request.url.includes('vercel');
   
   if (isAPI) {
