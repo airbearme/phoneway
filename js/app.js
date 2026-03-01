@@ -47,6 +47,11 @@ import { EnvironmentalCompensator } from './environmentalSensors.js';
 import { UltraPrecisionEngine } from './ultraPrecision.js';
 import { globalErrorLogger } from '../data/error-logger.js';
 
+// NEW: Quantum-inspired fusion and thermal compensation
+import { QuantumFusionEngine, HypothesisSpace } from './quantumFusion.js';
+import { RealTimeCompensator } from './thermalCompensation.js';
+import { AdvancedVerificationEngine, NISTReferenceDatabase } from './advancedVerification.js';
+
 /* ── Known calibration weights ────────────────────────────── */
 export const CAL_WEIGHTS = [
   { label: 'Dollar Bill',    grams: 1.00, icon: '💵', tip: 'Any US paper bill — any denomination equals exactly 1 gram' },
@@ -118,6 +123,16 @@ class PhonewayApp {
     this.advancedFusion = new AdvancedFusionEngine();
     this.environmental  = new EnvironmentalCompensator();
     this.ensembleCal    = new EnsembleCalibrator();
+    
+    // NEW: Quantum-inspired fusion engine
+    this.quantumFusion = new QuantumFusionEngine();
+    this.hypothesisSpace = new HypothesisSpace();
+    
+    // NEW: Thermal compensation
+    this.thermalCompensator = new RealTimeCompensator();
+    
+    // NEW: Advanced verification system
+    this.advancedVerification = new AdvancedVerificationEngine();
 
     // Display refs
     this.display    = null;

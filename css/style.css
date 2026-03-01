@@ -1,5 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════
    Phoneway Precision Scale — CSS
+   
+   IMPORTS PREMIUM LABORATORY SCALE AESTHETIC
+   For the head-shop aesthetic, see premium-style.css
+═══════════════════════════════════════════════════════════════ */
+
+@import url('premium-style.css');
+
+/* Legacy compatibility styles below */
+/* ═══════════════════════════════════════════════════════════════
+   Phoneway Precision Scale — CSS
    Head-shop digital scale aesthetic:
    ▸ Brushed black aluminum body
    ▸ Gold & chrome accents
