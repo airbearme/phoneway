@@ -611,8 +611,8 @@ class PhonewayApp {
 
     switch (s) {
       case 'READY':
-        this.display.setValue(0);
-        this.ledStable.on('green');
+        if (this.display) this.display.setValue(0);
+        if (this.ledStable) this.ledStable.on('green');
         if (this.accuracyDisplay) {
           const cal  = this.settings.calibrated ? 1.0 : 0.4;
           const surf = { excellent: 1.0, good: 0.8, ok: 0.55, poor: 0.3, unknown: 0.5 };
@@ -621,22 +621,22 @@ class PhonewayApp {
         }
         break;
       case 'MEASURING':
-        this.ledStable.on('orange');
+        if (this.ledStable) this.ledStable.on('orange');
         break;
       case 'STABLE':
-        this.ledStable.on('green');
+        if (this.ledStable) this.ledStable.on('green');
         this._haptic([20, 15, 20]);
         break;
       case 'ZEROING':
-        this.display.showTare();
-        this.ledStable.off();
+        if (this.display) this.display.showTare();
+        if (this.ledStable) this.ledStable.off();
         break;
       case 'CALIBRATING':
-        this.display.showCalibrate();
-        this.ledStable.on('blue');
+        if (this.display) this.display.showCalibrate();
+        if (this.ledStable) this.ledStable.on('blue');
         break;
       case 'ULTRA':
-        this.ledStable.on('cyan');
+        if (this.ledStable) this.ledStable.on('cyan');
         break;
     }
   }
@@ -2083,19 +2083,47 @@ class PhonewayApp {
 
 /* ── Visible error overlay for mobile debugging ──────────────── */
 function _showBootError(err) {
-  const msg = err?.message || String(err);
-  const stack = err?.stack ? err.stack.split('\n').slice(0,4).join('\n') : '';
+  const msg   = (err?.message || String(err)).slice(0, 300);
+  const stack = err?.stack ? err.stack.split('\n').slice(0, 6).join('\n') : '';
+  const src   = err?.fileName  || '';
+  const line  = err?.lineNumber || 0;
+
+  // Save to localStorage so the error survives a SW-triggered reload
+  try {
+    const ua = navigator.userAgent;
+    const dc = /Android/i.test(ua) ? 'android' : /iPhone|iPad|iPod/i.test(ua) ? 'ios' : 'desktop';
+    localStorage.setItem('phoneway_pendingError', JSON.stringify({
+      msg: msg.replace(/https?:\/\/\S+/g, '[url]').slice(0, 150),
+      src: src.split('/').pop().replace(/[?#].*$/, '').slice(0, 50),
+      line, dc, ts: Date.now(), v: '4.0',
+    }));
+  } catch (_) {}
+
   const el = document.createElement('div');
+  el.setAttribute('data-pw-error', '1');
   el.style.cssText = 'position:fixed;inset:0;background:#1a0000;z-index:99999;padding:20px;overflow:auto;font-family:monospace;font-size:12px;color:#ff4444';
-  el.innerHTML = `<b style="font-size:16px;color:#ff6666">BOOT ERROR — tap to copy</b><br><br><b>Message:</b><br>${msg}<br><br><b>Stack:</b><br><pre style="white-space:pre-wrap;color:#ffaaaa">${stack}</pre><br><button onclick="navigator.clipboard?.writeText('${(msg+'\n'+stack).replace(/'/g,"\\'")}').then(()=>alert('Copied!'))" style="background:#ff4444;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer">📋 COPY ERROR</button>&nbsp;<button onclick="localStorage.clear();location.reload()" style="background:#aa2200;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer">🔄 RESET &amp; RELOAD</button>`;
+  el.innerHTML = `<b style="font-size:16px;color:#ff6666">BOOT ERROR — tap to copy</b><br><br><b>Message:</b><br>${msg}<br><br><b>Stack:</b><br><pre style="white-space:pre-wrap;color:#ffaaaa">${stack}</pre><br><button onclick="navigator.clipboard?.writeText('${(msg+'\n'+stack).replace(/'/g,"\\'")}').then(()=>alert('Copied!'))" style="background:#ff4444;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer">📋 COPY ERROR</button>&nbsp;<button onclick="localStorage.removeItem('phoneway_pendingError');localStorage.clear();location.reload()" style="background:#aa2200;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer">🔄 RESET &amp; RELOAD</button>`;
   document.body.appendChild(el);
 }
 
 /* ── Boot ──────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
-  // Global unhandled rejection catcher — shows error on screen instead of silent fail
-  window.addEventListener('unhandledrejection', e => _showBootError(e.reason));
-  window.addEventListener('error', e => _showBootError(e.error || e.message));
+  // Recover any error that was saved to localStorage before a SW-triggered reload
+  try {
+    const saved = localStorage.getItem('phoneway_pendingError');
+    if (saved) {
+      localStorage.removeItem('phoneway_pendingError');
+      const e = JSON.parse(saved);
+      // Re-report it now that we're stable
+      fetch('/api/telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceClass: e.dc, events: [{ type: 'js_error', data: e, timestamp: e.ts }] }),
+        keepalive: true,
+      }).catch(() => {});
+      _showBootError(new Error(e.msg + ' (recovered from reload)\n' + (e.src || '') + ':' + (e.line || '')));
+    }
+  } catch (_) {}
 
   let app;
   try {
@@ -2114,6 +2142,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});
-    navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
+    // Only reload on controller change if no error overlay is visible — avoids
+    // wiping the error screen right after a crash.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!document.querySelector('[data-pw-error]')) window.location.reload();
+    });
   }
 });
