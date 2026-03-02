@@ -712,54 +712,64 @@ window.addEventListener('beforeinstallprompt', e => {
     if (b) b.classList.add('show');
   }
 
-  // Auto-trigger on first visit (desktop only after longer delay)
+  // Auto-show install banner/modal but DON'T auto-prompt (requires user gesture)
   const shown = sessionStorage.getItem('installPromptShown');
   if (!shown) {
     sessionStorage.setItem('installPromptShown', '1');
     if (_isDesktop) {
-      // Desktop: show after user has explored a bit
+      // Desktop: show modal after delay
       setTimeout(() => {
-        if (_dip && !sessionStorage.getItem('installPromptAutoShown')) {
+        if (!sessionStorage.getItem('installPromptAutoShown')) {
           sessionStorage.setItem('installPromptAutoShown', '1');
           const modal = document.getElementById('desktopInstallModal');
           if (modal) modal.style.display = 'flex';
         }
       }, 8000);
-    } else {
-      // Mobile: quick prompt
-      setTimeout(() => { if (_dip) { _dip.prompt(); } }, 2000);
     }
+    // Mobile: banner shows automatically, user must click install
   }
 });
 
-// Mobile banner install button
+// Mobile banner install button - MUST be user gesture
 document.getElementById('installBtn')?.addEventListener('click', async () => {
-  if (!_dip) return;
-  _dip.prompt();
-  const { outcome } = await _dip.userChoice;
-  if (outcome === 'accepted') {
-    document.getElementById('installBanner').classList.remove('show');
-    if ('vibrate' in navigator) navigator.vibrate([30, 20, 100]);
-    _showInstallSuccess();
+  if (!_dip) {
+    _showManualInstallInstructions();
+    return;
   }
-  _dip = null;
+  try {
+    _dip.prompt();
+    const { outcome } = await _dip.userChoice;
+    if (outcome === 'accepted') {
+      document.getElementById('installBanner').classList.remove('show');
+      if ('vibrate' in navigator) navigator.vibrate([30, 20, 100]);
+      _showInstallSuccess();
+    }
+    _dip = null;
+  } catch (e) {
+    console.log('Install prompt failed:', e);
+    _showManualInstallInstructions();
+  }
 });
 
 // Desktop modal install button
 document.getElementById('desktopInstallBtn')?.addEventListener('click', async () => {
   if (!_dip) {
-    // If no deferred prompt (already installed or not supported), show manual instructions
     _showManualInstallInstructions();
     return;
   }
-  _dip.prompt();
-  const { outcome } = await _dip.userChoice;
-  if (outcome === 'accepted') {
-    document.getElementById('desktopInstallModal').style.display = 'none';
-    document.getElementById('installBanner').classList.remove('show');
-    _showInstallSuccess();
+  try {
+    _dip.prompt();
+    const { outcome } = await _dip.userChoice;
+    if (outcome === 'accepted') {
+      document.getElementById('desktopInstallModal').style.display = 'none';
+      document.getElementById('installBanner').classList.remove('show');
+      _showInstallSuccess();
+    }
+    _dip = null;
+  } catch (e) {
+    console.log('Install prompt failed:', e);
+    _showManualInstallInstructions();
   }
-  _dip = null;
 });
 
 document.getElementById('desktopInstallCancel')?.addEventListener('click', () => {
