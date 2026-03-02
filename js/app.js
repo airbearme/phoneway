@@ -684,7 +684,7 @@ class PhonewayApp {
         try { this.audio.start(); } catch {}
       }
       lastCount = activeNow;
-    }, 30_000);
+    }, 30000);
   }
 
   /* ── Sensor Start ─────────────────────────────────────────── */

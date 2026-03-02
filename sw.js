@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v3.6-syntaxfix';
+const CACHE = 'phoneway-v3.7-lhsfix';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -38,6 +38,8 @@ const ASSETS = [
   BASE + 'js/advancedVerification.js',
   BASE + 'data/community-priors.json',
   BASE + 'data/error-logger.js',
+  BASE + 'js/adaptiveFilter.js',
+  BASE + 'js/predictiveCalibration.js',
   BASE + 'js/telemetry.js',
   BASE + 'js/app.js',
   BASE + 'icons/icon.svg',

@@ -782,9 +782,12 @@ function _showManualInstallInstructions() {
 
 // Installed event
 window.addEventListener('appinstalled', () => {
-  document.getElementById('installBanner')?.classList.remove('show');
-  document.getElementById('desktopInstallModal')?.style.display = 'none';
-  document.getElementById('iosHint')?.remove();
+  var _ib = document.getElementById('installBanner');
+  if (_ib) _ib.classList.remove('show');
+  var _dm = document.getElementById('desktopInstallModal');
+  if (_dm) _dm.style.display = 'none';
+  var _ih = document.getElementById('iosHint');
+  if (_ih) _ih.remove();
   _showInstallSuccess();
   if ('vibrate' in navigator) navigator.vibrate([50, 30, 50, 30, 200]);
 });
