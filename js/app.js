@@ -469,8 +469,8 @@ class PhonewayApp {
   }
 
   _updateEnvironmentalData() {
-    const battery = this.environmental.battery.getData();
-    const orientation = this.environmental.orientation.data.orientation;
+    const battery = this.environmental.battery?.getData?.() ?? {};
+    const orientation = this.environmental.data?.orientation?.orientation;
     
     this._envData = {
       batteryLevel: battery?.level,
@@ -509,7 +509,7 @@ class PhonewayApp {
   _startSensorPolling() {
     this._sensorPollInterval = setInterval(() => {
       if (this.state === 'READY' || this.state === 'MEASURING') {
-        this._pollAllSensors();
+        this._updateEnvironmentalData();
       }
     }, 2000);
   }
