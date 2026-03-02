@@ -289,9 +289,16 @@ class PhonewayApp {
     // Load saved calibration
     if (this.settings.calibrated) {
       this._loadCalibration();
+      // iOS 13+ requires DeviceMotionEvent.requestPermission() to be called
+      // from a direct user gesture. For returning calibrated users we show a
+      // one-tap overlay so iOS grants the permission correctly.
+      if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+        await this._showIOSTapGate();
+      }
       await this._startAllSensors();
       this._setState('READY');
       this._startSensorPolling();
+      this._startSensorWatchdog();
       this._startEnvironmentalMonitoring();
     } else {
       this._showOnboard();
@@ -626,6 +633,56 @@ class PhonewayApp {
     }
   }
 
+  /* ── iOS Tap Gate ─────────────────────────────────────────── */
+  _showIOSTapGate() {
+    return new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.style.cssText = [
+        'position:fixed', 'inset:0', 'background:#000', 'z-index:9999',
+        'display:flex', 'flex-direction:column', 'align-items:center',
+        'justify-content:center', 'gap:24px', 'cursor:pointer',
+        'touch-action:manipulation',
+      ].join(';');
+      ov.innerHTML = `
+        <div style="font-size:64px">📱</div>
+        <div style="color:#e8c84a;font-family:monospace;font-size:20px;letter-spacing:4px;text-align:center">
+          TAP TO ACTIVATE<br>
+          <span style="font-size:13px;color:#888;letter-spacing:1px">Phoneway needs motion sensors</span>
+        </div>
+        <div style="background:#1a1a1a;border:1px solid #e8c84a;border-radius:12px;padding:16px 40px;
+          color:#e8c84a;font-family:monospace;font-size:14px;letter-spacing:2px">
+          TAP ANYWHERE
+        </div>`;
+      document.body.appendChild(ov);
+      const done = () => { ov.remove(); resolve(); };
+      ov.addEventListener('click',      done, { once: true });
+      ov.addEventListener('touchstart', done, { once: true, passive: true });
+    });
+  }
+
+  /* ── Sensor Watchdog ──────────────────────────────────────── */
+  _startSensorWatchdog() {
+    if (this._watchdogInterval) return;
+    let lastCount = 0;
+    this._watchdogInterval = setInterval(async () => {
+      if (!this.powered || ['OFF','CALIBRATING','ZEROING'].includes(this.state)) return;
+      const activeNow = [...(this.fusion?.sources?.values() || [])]
+        .filter(s => s.confidence > 0.1 && s.estimate > 0).length;
+      // If accel sensor has dropped (no readings for 30s window)
+      if (!this.motion.active && this.state !== 'OFF') {
+        try {
+          this.motion.start();
+          telemetry.logSensorError('motion_watchdog', 'restarted_dropped_sensor');
+        } catch {}
+      }
+      // If audio was active but stopped producing (ledAudio went red)
+      if (this.audio.supported && !this.audio._active) {
+        try { this.audio.start(); } catch {}
+      }
+      lastCount = activeNow;
+    }, 30_000);
+  }
+
   /* ── Sensor Start ─────────────────────────────────────────── */
   async _startAllSensors() {
     const avail = await this.genSensor.init(60).catch(() => ({}));
@@ -698,7 +755,7 @@ class PhonewayApp {
     modal.querySelector('#skipCalBtn')?.addEventListener('click', () => {
       modal.style.display = 'none';
       this.motion.sensitivity = 180;
-      this._startAllSensors().then(() => this._setState('READY'));
+      this._startAllSensors().then(() => { this._setState('READY'); this._startSensorWatchdog(); });
     });
   }
 
@@ -1366,9 +1423,48 @@ class PhonewayApp {
       thermalEl.textContent = batt?.isStable ? '✓ Stable' : batt?.charging ? '⚡ Charging' : '⚠ Wait';
       thermalEl.className = batt?.isStable ? 'env-good' : 'env-warn';
     }
-    
+
+    // Community stats from crowd-sourced telemetry
+    this._populateCommunityStats();
+
     panel.style.display = 'block';
     this._haptic([15, 10, 15]);
+  }
+
+  _populateCommunityStats() {
+    const el = document.getElementById('accCommunity');
+    if (!el) return;
+
+    const render = (s) => {
+      if (!s || !s.verifyCount) {
+        el.innerHTML = '<span style="color:#555">No community data yet — be the first to verify!</span>';
+        return;
+      }
+      const passRate  = s.passRate ?? 0;
+      const passColor = passRate >= 0.75 ? '#39ff14' : passRate >= 0.5 ? '#e8c84a' : '#ff8c00';
+      const errColor  = s.meanError < 5   ? '#39ff14' : s.meanError < 10  ? '#e8c84a' : '#ff8c00';
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+          <div>
+            <div style="color:#666;font-size:9px;letter-spacing:1px">DEVICES</div>
+            <div style="color:var(--seg-on);font-size:15px;font-weight:bold">${s.verifyCount}</div>
+          </div>
+          <div>
+            <div style="color:#666;font-size:9px;letter-spacing:1px">PASS RATE</div>
+            <div style="color:${passColor};font-size:15px;font-weight:bold">${Math.round(passRate * 100)}%</div>
+          </div>
+          <div>
+            <div style="color:#666;font-size:9px;letter-spacing:1px">AVG ERROR</div>
+            <div style="color:${errColor};font-size:15px;font-weight:bold">±${(s.meanError || 0).toFixed(1)}%</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;color:#444;font-size:9px;text-align:right">
+          ${s.source === 'live' ? '● LIVE' : '○ DEFAULT'} · ${(s.deviceClass || '').toUpperCase()}
+        </div>`;
+    };
+
+    render(telemetry._globalStats);
+    telemetry.fetchGlobalStats().then(render).catch(() => {});
   }
   
   _closeAccuracyPanel() {
@@ -1624,6 +1720,10 @@ class PhonewayApp {
       this.camera.stop();
       this.genSensor.stop();
       this.environmental.stop();
+      if (this._watchdogInterval) {
+        clearInterval(this._watchdogInterval);
+        this._watchdogInterval = null;
+      }
       this.display.setValue(null);
       this.ledStable.off();
       this.ledAudio.off();
