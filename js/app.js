@@ -1836,7 +1836,7 @@ class PhonewayApp {
                    this._stableBuf.length === this.STABLE_WIN;
 
     const stabPct = Math.min(100, stabilityScore * 100);
-    this.stabBar.set(stabPct, stable);
+    if (this.stabBar) this.stabBar.set(stabPct, stable);
 
     // Real-time accuracy calculation
     const calScore = this.settings.calibrated ? 1.0 : 0.4;
@@ -1910,7 +1910,7 @@ class PhonewayApp {
 
   _updateReadout(g) {
     const u = UNITS[this.unitIdx];
-    this.display.setValue(g * u.factor);
+    if (this.display) this.display.setValue(g * u.factor);
   }
 
   _variance(arr) {

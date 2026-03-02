@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v3.7-lhsfix';
+const CACHE = 'phoneway-v3.8-errorreporter';
 const BASE  = self.registration.scope;
 
 const ASSETS = [

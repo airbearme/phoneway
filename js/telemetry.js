@@ -107,6 +107,21 @@ export class Telemetry {
     this.log('capabilities', { ..._capabilitySnapshot(), ...extra });
   }
 
+  /**
+   * JavaScript runtime error — sanitised, no PII.
+   * Sent immediately (doesn't wait for the 20-second flush interval).
+   */
+  logJSError(msg, src, line, col) {
+    this.log('js_error', {
+      msg:  String(msg  || '').slice(0, 150).replace(/https?:\/\/\S+/g, '[url]'),
+      src:  String(src  || '').split('/').pop().replace(/\?.*$/, '').slice(0, 50),
+      line: Number(line) || 0,
+      col:  Number(col)  || 0,
+      v:    '3.7',
+    });
+    this.flush(); // send right away so crashes are captured before page closes
+  }
+
   /** Active sensor count when a stable reading was achieved */
   logStableReading(grams, activeSensors, accPct) {
     this.log('stable_reading', {
