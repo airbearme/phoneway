@@ -17,7 +17,9 @@ export const config = { runtime: 'edge' };
 const BLOB_BASE = 'https://xxogfqf3bfaznkdp.public.blob.vercel-storage.com';
 
 function viewerKey() {
-  return typeof process !== 'undefined' ? process.env.ERROR_VIEWER_KEY : undefined;
+  return typeof process !== 'undefined'
+    ? (process.env.ERROR_VIEWER_KEY || '').trim()
+    : undefined;
 }
 
 async function fetchErrors() {
