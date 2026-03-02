@@ -205,24 +205,28 @@ class PhonewayApp {
   /* ── Boot ─────────────────────────────────────────────────── */
   async boot() {
     this._bindUI();
-    this._initDisplay();
-    this._initSensorBars();
+
+    try { this._initDisplay(); } catch (e) { console.warn('[boot] _initDisplay failed:', e); }
+    try { this._initSensorBars(); } catch (e) { console.warn('[boot] _initSensorBars failed:', e); }
 
     // Boot accuracy display
     const accDigitEl = document.getElementById('accDigits');
     const accBarEl   = document.getElementById('accBar');
     if (accDigitEl && accBarEl) {
-      this.accuracyDisplay = new AccuracyDisplay(accDigitEl, accBarEl);
+      try { this.accuracyDisplay = new AccuracyDisplay(accDigitEl, accBarEl); } catch {}
     }
 
-    await Promise.all([
-      this.display.startup(),
-      this.accuracyDisplay?.startup(),
-    ]);
-    this.ledPower.on('green');
+    try {
+      await Promise.all([
+        this.display?.startup?.(),
+        this.accuracyDisplay?.startup?.(),
+      ]);
+    } catch (e) { console.warn('[boot] display startup failed:', e); }
+
+    try { this.ledPower?.on('green'); } catch {}
 
     // Initialize ultra-precision engine
-    await this.ultraPrecision.init();
+    try { await this.ultraPrecision.init(); } catch (e) { console.warn('[boot] ultraPrecision.init failed:', e); }
 
     // Register all fusion sources
     this._registerFusionSources();
@@ -2069,11 +2073,36 @@ class PhonewayApp {
   }
 }
 
+/* ── Visible error overlay for mobile debugging ──────────────── */
+function _showBootError(err) {
+  const msg = err?.message || String(err);
+  const stack = err?.stack ? err.stack.split('\n').slice(0,4).join('\n') : '';
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;inset:0;background:#1a0000;z-index:99999;padding:20px;overflow:auto;font-family:monospace;font-size:12px;color:#ff4444';
+  el.innerHTML = `<b style="font-size:16px;color:#ff6666">BOOT ERROR — tap to copy</b><br><br><b>Message:</b><br>${msg}<br><br><b>Stack:</b><br><pre style="white-space:pre-wrap;color:#ffaaaa">${stack}</pre><br><button onclick="navigator.clipboard?.writeText('${(msg+'\n'+stack).replace(/'/g,"\\'")}').then(()=>alert('Copied!'))" style="background:#ff4444;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer">📋 COPY ERROR</button>&nbsp;<button onclick="localStorage.clear();location.reload()" style="background:#aa2200;color:#fff;border:none;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer">🔄 RESET &amp; RELOAD</button>`;
+  document.body.appendChild(el);
+}
+
 /* ── Boot ──────────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
-  const app = new PhonewayApp();
-  window.__phoneway = app;
-  app.boot().catch(console.error);
+document.addEventListener('DOMContentLoaded', async () => {
+  // Global unhandled rejection catcher — shows error on screen instead of silent fail
+  window.addEventListener('unhandledrejection', e => _showBootError(e.reason));
+  window.addEventListener('error', e => _showBootError(e.error || e.message));
+
+  let app;
+  try {
+    app = new PhonewayApp();
+    window.__phoneway = app;
+  } catch (err) {
+    _showBootError(err);
+    return;
+  }
+
+  try {
+    await app.boot();
+  } catch (err) {
+    _showBootError(err);
+  }
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});

@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v3.3-ios-community';
+const CACHE = 'phoneway-v3.4-debug';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
