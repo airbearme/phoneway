@@ -310,6 +310,9 @@ class PhonewayApp {
     
     // Check for recalibration needs
     this._checkRecalibrationStatus();
+    // DEBUG PANEL - Shows calibration state
+    this._initDebugPanel();
+
   }
 
   _registerFusionSources() {
