@@ -12,18 +12,7 @@
   <link rel="manifest"          href="manifest.json?v=3.1.0"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
   <link rel="stylesheet"        href="css/style.css?v=3.1.0"/>
-<script>
-// Version check and auto-update
-const APP_VERSION = '3.1.0';
-const storedVersion = localStorage.getItem('phoneway_version');
-if (storedVersion && storedVersion !== APP_VERSION) {
-  if ('caches' in window) {
-    caches.keys().then(keys => {
-      keys.forEach(key => caches.delete(key));
-    });
-  }
-  localStorage.setItem('phoneway_version', APP_VERSION);
-  console.log([Phoneway]
+
 <script>
 // Version check and auto-update
 const APP_VERSION = '3.1.0';
