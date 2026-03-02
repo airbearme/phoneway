@@ -409,6 +409,7 @@ class BayesianFusion {
     this.sources = new Map();  // name → { prior, estimate, confidence }
     this.smooth  = new ExpSmooth(0.15);
     this.tare    = 0;
+    this._fusing = false;  // Stack protection
 
     this.fusedWeight     = 0;
     this.fusedConfidence = 0;
@@ -428,22 +429,30 @@ class BayesianFusion {
   }
 
   _fuse() {
-    let num = 0, den = 0;
-    for (const s of this.sources.values()) {
-      const w = s.prior * s.confidence;
-      num += s.estimate * w;
-      den += w;
-    }
+    // Prevent stack overflow from rapid sensor updates
+    if (this._fusing) return;
+    this._fusing = true;
+    
+    try {
+      let num = 0, den = 0;
+      for (const s of this.sources.values()) {
+        const w = s.prior * s.confidence;
+        num += s.estimate * w;
+        den += w;
+      }
 
-    if (den < 0.0001) {
-      this.fusedWeight     = 0;
-      this.fusedConfidence = 0;
-    } else {
-      const raw            = num / den;
-      this.fusedWeight     = Math.max(0, this.smooth.update(raw) - this.tare);
-      this.fusedConfidence = Math.min(1, den / this.sources.size);
+      if (den < 0.0001) {
+        this.fusedWeight     = 0;
+        this.fusedConfidence = 0;
+      } else {
+        const raw            = num / den;
+        this.fusedWeight     = Math.max(0, this.smooth.update(raw) - this.tare);
+        this.fusedConfidence = Math.min(1, den / this.sources.size);
+      }
+      this.onFused?.(this.fusedWeight, this.fusedConfidence);
+    } finally {
+      this._fusing = false;
     }
-    this.onFused?.(this.fusedWeight, this.fusedConfidence);
   }
 
   setTare(g)  { this.tare = g; }
