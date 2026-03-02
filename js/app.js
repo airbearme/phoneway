@@ -185,6 +185,9 @@ class PhonewayApp {
 
     // ML engine
     this.learn = new LearningEngine();
+    
+    // Recursion guards
+    this._inOnFused = false;
 
     // Reading history
     this._readingHistory = [];
@@ -1797,8 +1800,15 @@ class PhonewayApp {
   }
 
   _onFused(g, conf) {
+    // Prevent infinite recursion
+    if (this._inOnFused) return;
+    this._inOnFused = true;
+    
     if (!this.powered || this.held ||
-        ['OFF','ZEROING','CALIBRATING','ULTRA'].includes(this.state)) return;
+        ['OFF','ZEROING','CALIBRATING','ULTRA'].includes(this.state)) {
+      this._inOnFused = false;
+      return;
+    }
 
     // Apply ML corrections in real-time
     let correctedG = g;
@@ -1814,13 +1824,13 @@ class PhonewayApp {
       conf = mlResult.confidence;
     }
 
-    // Emergency fallback
+    // Emergency fallback - use emergency weight directly without recursive update
     if (correctedG < 0.01 && conf < 0.05) {
       const emergency = this._getEmergencyWeight();
       if (emergency && emergency.grams > 0.1) {
         correctedG = emergency.grams;
         conf = emergency.confidence;
-        this.fusion.update('accel', correctedG, conf);
+        // DO NOT call fusion.update here - it causes infinite recursion!
       }
     }
 
@@ -1828,12 +1838,6 @@ class PhonewayApp {
     this._updateReadout(correctedG);
 
     
-    // Update debug display
-    const debugEl = document.getElementById('debugText');
-    if (debugEl) {
-      debugEl.textContent = `sens:${(this.motion.sensitivity||0).toFixed(0)} base:${this.motion.baseline?'Y':'N'} tare:${(this.fusion.tare||0).toFixed(2)} g:${correctedG.toFixed(2)} state:${this.state}`;
-    }
-
     // Stability detection
     this._stableBuf.push(correctedG);
     if (this._stableBuf.length > this.STABLE_WIN) this._stableBuf.shift();
@@ -1857,6 +1861,9 @@ class PhonewayApp {
       calScore       * 0.15 +
       surfScore      * 0.10;
 
+    // Release recursion guard
+    this._inOnFused = false;
+    
     // Graduated consensus bonus — rewards multi-sensor agreement proportionally.
     // Threshold tightened to 12% for ±0.1g target (was 20%).
     let consensusBonus = 0;
