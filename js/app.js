@@ -310,8 +310,6 @@ class PhonewayApp {
     
     // Check for recalibration needs
     this._checkRecalibrationStatus();
-    // DEBUG PANEL - Shows calibration state
-    this._initDebugPanel();
 
   }
 
@@ -1828,6 +1826,13 @@ class PhonewayApp {
 
     this.currentG = correctedG;
     this._updateReadout(correctedG);
+
+    
+    // Update debug display
+    const debugEl = document.getElementById('debugText');
+    if (debugEl) {
+      debugEl.textContent = `sens:${(this.motion.sensitivity||0).toFixed(0)} base:${this.motion.baseline?'Y':'N'} tare:${(this.fusion.tare||0).toFixed(2)} g:${correctedG.toFixed(2)} state:${this.state}`;
+    }
 
     // Stability detection
     this._stableBuf.push(correctedG);
