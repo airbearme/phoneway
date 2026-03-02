@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v3.4-debug';
+const CACHE = 'phoneway-v3.5-errortrap';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
