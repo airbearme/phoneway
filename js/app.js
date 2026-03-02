@@ -1804,11 +1804,11 @@ class PhonewayApp {
     if (this._inOnFused) return;
     this._inOnFused = true;
     
-    if (!this.powered || this.held ||
-        ['OFF','ZEROING','CALIBRATING','ULTRA'].includes(this.state)) {
-      this._inOnFused = false;
-      return;
-    }
+    try {
+      if (!this.powered || this.held ||
+          ['OFF','ZEROING','CALIBRATING','ULTRA'].includes(this.state)) {
+        return;
+      }
 
     // Apply ML corrections in real-time
     let correctedG = g;
@@ -1861,9 +1861,7 @@ class PhonewayApp {
       calScore       * 0.15 +
       surfScore      * 0.10;
 
-    // Release recursion guard
-    this._inOnFused = false;
-    
+
     // Graduated consensus bonus — rewards multi-sensor agreement proportionally.
     // Threshold tightened to 12% for ±0.1g target (was 20%).
     let consensusBonus = 0;
