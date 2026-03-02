@@ -1800,15 +1800,10 @@ class PhonewayApp {
   }
 
   _onFused(g, conf) {
-    // Prevent infinite recursion
-    if (this._inOnFused) return;
-    this._inOnFused = true;
-    
-    try {
-      if (!this.powered || this.held ||
-          ['OFF','ZEROING','CALIBRATING','ULTRA'].includes(this.state)) {
-        return;
-      }
+    if (!this.powered || this.held ||
+        ['OFF','ZEROING','CALIBRATING','ULTRA'].includes(this.state)) {
+      return;
+    }
 
     // Apply ML corrections in real-time
     let correctedG = g;

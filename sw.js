@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v3.9-runtimefix';
+const CACHE = 'phoneway-v4.0-fused-fix';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
