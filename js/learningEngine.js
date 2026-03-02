@@ -105,7 +105,7 @@ class CommunityPriors {
     try {
       const res = await fetch(baseUrl + 'data/community-priors.json', {
         cache:  'no-cache',
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined,
       });
       if (res.ok) this._priors = await res.json();
     } catch { /* offline or timeout — not critical */ }
@@ -119,8 +119,9 @@ class CommunityPriors {
   getSuggested(phoneMassG) {
     if (!this._priors?.buckets) return null;
     const m      = phoneMassG || 170;
-    const bucket = this._priors.buckets.find(b => m >= b.min && m <= b.max)
-                ?? this._priors.buckets.at(-1);
+    const buckets = this._priors.buckets;
+    const bucket = buckets.find(b => m >= b.min && m <= b.max)
+                ?? buckets[buckets.length - 1];
     return bucket?.sensitivity ?? null;
   }
 
@@ -135,7 +136,7 @@ class CommunityPriors {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify({ phoneMass, sensitivity, verifyCount, ts: Date.now() }),
-        signal:  AbortSignal.timeout(5000),
+        signal:  AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined,
       });
     } catch { /* best-effort */ }
   }

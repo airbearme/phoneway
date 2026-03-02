@@ -335,6 +335,7 @@ class MotionSensor {
     this.convergenceDetector.reset();
     this.tempCompensator.calibrateZero(0);
   }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    TouchSensor  —  pressure / area via pointer/touch events
