@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v4.3-precision';
+const CACHE = 'phoneway-v4.4-production';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
@@ -51,7 +51,14 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => {
       console.log('[SW] Caching', ASSETS.length, 'assets');
-      return c.addAll(ASSETS);
+      // allSettled: one missing/failed asset never aborts the whole SW install
+      return Promise.allSettled(
+        ASSETS.map(url =>
+          fetch(url).then(res => {
+            if (res && res.ok) return c.put(url, res);
+          }).catch(() => {})
+        )
+      );
     })
   );
   self.skipWaiting();

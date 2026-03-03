@@ -500,7 +500,7 @@ class PhonewayApp {
     }
     
     // Check error log for drift patterns
-    const recCheck = this.ultraPrecision.adaptiveCal.checkRecalibrationNeeded();
+    const recCheck = this.ultraPrecision?.adaptiveCal?.checkRecalibrationNeeded?.() ?? { needed: false };
     if (recCheck.needed) {
       this._showToast(`⚠ ${recCheck.reason}: Recalibration recommended`, 4000);
     }
@@ -768,7 +768,12 @@ class PhonewayApp {
     modal.querySelector('#skipCalBtn')?.addEventListener('click', () => {
       modal.style.display = 'none';
       this.motion.sensitivity = 180;
-      this._startAllSensors().then(() => { this._setState('READY'); this._startSensorWatchdog(); });
+      this._startAllSensors().then(() => {
+        this._setState('READY');
+        this._startSensorPolling();
+        this._startSensorWatchdog();
+        this._startEnvironmentalMonitoring();
+      });
     });
   }
 
