@@ -157,6 +157,10 @@ class PhonewayApp {
     this.STABLE_WIN = 30;
     this.STABLE_THR = 0.1;  // Tighter for 0.1g target
 
+    // Display rate limiting — max 5Hz updates, buffer-mean smoothing, 0.05g deadband
+    this._lastDisplayMs = 0;
+    this._displayG = 0;
+
     // Accuracy tracking
     this.accuracyDisplay = null;
     this._lastAccPct     = 0;
@@ -1872,12 +1876,24 @@ class PhonewayApp {
     }
 
     this.currentG = correctedG;
-    this._updateReadout(correctedG);
 
-    
-    // Stability detection
+    // Stability buffer — push first so display mean uses the freshest sample
     this._stableBuf.push(correctedG);
     if (this._stableBuf.length > this.STABLE_WIN) this._stableBuf.shift();
+
+    // Rate-limited display: max 5Hz, rolling-mean, 0.05 g deadband.
+    // This is the primary fix for numbers bouncing all over the screen.
+    const _now = Date.now();
+    if (_now - this._lastDisplayMs >= 200) {
+      this._lastDisplayMs = _now;
+      const displayG = this._stableBuf.length >= 8
+        ? this._stableBuf.reduce((a, b) => a + b, 0) / this._stableBuf.length
+        : correctedG;
+      if (Math.abs(displayG - this._displayG) >= 0.05 || displayG < 0.05) {
+        this._displayG = displayG;
+        this._updateReadout(displayG);
+      }
+    }
 
     const variance = this._variance(this._stableBuf);
     const stabilityScore = 1 / (1 + variance * 120);

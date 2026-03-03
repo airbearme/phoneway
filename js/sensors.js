@@ -65,7 +65,7 @@ class MotionSensor {
     // Filtering pipeline  (order matters!)
     this.kalman  = new KalmanFilter2D({ R: 0.3, Q: 0.008 });  // Tighter for precision
     this.median  = new MedianFilter(11);
-    this.mavg    = new MovingAverageFilter(50);
+    this.mavg    = new MovingAverageFilter(80);  // ~1.3s window at 60Hz — smoother signal
     this.particle = new ParticleFilter({ N: 300, sigmaProcess: 0.05, sigmaMeasure: 0.25 });
     
     // NEW: Precision components
@@ -407,7 +407,7 @@ class TouchSensor {
 class BayesianFusion {
   constructor() {
     this.sources = new Map();  // name → { prior, estimate, confidence }
-    this.smooth  = new ExpSmooth(0.15);
+    this.smooth  = new ExpSmooth(0.07);  // Slow enough to damp per-sensor noise
     this.tare    = 0;
     this._fusing = false;  // Stack protection
 
