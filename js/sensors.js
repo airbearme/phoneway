@@ -245,8 +245,9 @@ class MotionSensor {
   /** Least-squares fit through origin for sensitivity */
   _fitSensitivity() {
     if (!this.calPoints.length) return;
-    const num = this.calPoints.reduce((a, p) => a + p.grams * p.deltaA, 0);
-    const den = this.calPoints.reduce((a, p) => a + p.deltaA * p.deltaA,  0);
+    // Weighted least-squares through origin — higher-confidence points count more
+    const num = this.calPoints.reduce((a, p) => a + p.confidence * p.grams * p.deltaA, 0);
+    const den = this.calPoints.reduce((a, p) => a + p.confidence * p.deltaA * p.deltaA, 0);
     
     if (den > 0) {
       this.sensitivity = num / den;

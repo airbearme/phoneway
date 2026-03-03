@@ -101,7 +101,7 @@ class SevenSegmentDisplay {
 
     let str = value.toFixed(this.decimals);
     // Remove decimal point for character array (handled by CSS)
-    str = str.replace('.', '');
+    str = str.replace(/\./g, '');
 
     // Pad left
     while (str.length < this.digits) str = ' ' + str;

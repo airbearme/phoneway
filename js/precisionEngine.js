@@ -46,6 +46,7 @@ class PrecisionMeasurement {
     this.running = true;
     this.samples = [];
     this._startTime = performance.now();
+    this._lastConvergenceCheck = 0;  // reset per-session
     
     return new Promise((resolve) => {
       this._resolve = resolve;
@@ -75,8 +76,9 @@ class PrecisionMeasurement {
         // Continue despite sample errors
       }
       
-      // Check convergence every 500ms
-      if (elapsed > this.minDuration && elapsed % 500 < this.sampleInterval) {
+      // Check convergence every 500ms (modulo is unreliable with wall-clock jitter)
+      if (elapsed > this.minDuration && elapsed - this._lastConvergenceCheck >= 500) {
+        this._lastConvergenceCheck = elapsed;
         const stats = this._computeStats();
         
         // Check if we've reached target precision
@@ -322,7 +324,8 @@ class ConvergenceDetector {
     const sumXY = this.times.reduce((a, t, i) => a + t * this.values[i], 0);
     const sumX2 = this.times.reduce((a, t) => a + t * t, 0);
     
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const denom = n * sumX2 - sumX * sumX;
+    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
     
     return Math.abs(slope) < this.slopeThreshold;
   }

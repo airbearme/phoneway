@@ -24,14 +24,19 @@ class ParticleFilterFusion {
     this._initParticles();
   }
 
-  _initParticles() {
-    // Initialize with uniform distribution 0-100g
+  _initParticles(mean = 0, spread = 5) {
+    // Initialize near zero (scale starts empty); spread allows quick lock-on to first weight
     this.particles = new Float32Array(this.N);
     this.weights = new Float32Array(this.N).fill(1 / this.N);
-    
+
     for (let i = 0; i < this.N; i++) {
-      this.particles[i] = Math.random() * 100;
+      this.particles[i] = Math.max(0, mean + (Math.random() * 2 - 1) * spread);
     }
+  }
+
+  /** Re-centre particles around a new known value (e.g. after tare or calibration) */
+  resetTo(mean = 0, spread = 5) {
+    this._initParticles(mean, spread);
   }
 
   /**
@@ -394,8 +399,10 @@ class AdvancedFusionEngine {
       this.particleFilter.predict(Math.min(1, dt / 1000));
     }
     
-    // Update with measurement
-    const variance = (0.5 / (confidence + 0.1)) ** 2;
+    // Update with measurement.
+    // Variance scales with (1-confidence)²: high-confidence sensors get σ≈0.1g,
+    // low-confidence sensors get σ≈2g so they barely move the particle cloud.
+    const variance = 0.01 + (1 - confidence) ** 2 * 4;
     this.particleFilter.update(grams, variance, confidence);
     
     this.lastUpdate = timestamp;

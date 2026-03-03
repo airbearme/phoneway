@@ -79,7 +79,7 @@ class FrequencyConsensus {
     // Find the largest group of mutually-agreeing frequencies (within 8%)
     let best = [];
     for (const ref of entries) {
-      const group = entries.filter(f => Math.abs(f - ref) / ref <= 0.08);
+      const group = entries.filter(f => Math.abs(f - ref) <= Math.max(0.5, ref * 0.08));
       if (group.length > best.length) best = group;
     }
     if (best.length < 2) return;

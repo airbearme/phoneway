@@ -9,7 +9,7 @@
  * - Premium laboratory-grade UI
  */
 
-const CACHE = 'phoneway-v4.2-stable';
+const CACHE = 'phoneway-v4.3-precision';
 const BASE  = self.registration.scope;
 
 const ASSETS = [
