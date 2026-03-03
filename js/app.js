@@ -46,16 +46,10 @@ import { AdvancedFusionEngine } from './advancedFusion.js';
 import { EnvironmentalCompensator } from './environmentalSensors.js';
 import { UltraPrecisionEngine } from './ultraPrecision.js';
 import { globalErrorLogger } from '../data/error-logger.js';
-// NEW: Advanced adaptive signal processing
-import { AdaptiveSignalProcessor, ContinuousKalmanFilter } from './adaptiveFilter.js';
-
-// NEW: Predictive calibration with ML
-import { CalibrationPredictor, NonlinearCalibration, AutoCalibrator } from './predictiveCalibration.js';
-
-// NEW: Quantum-inspired fusion and thermal compensation
+// NEW: Advanced fusion and compensation
 import { QuantumFusionEngine, HypothesisSpace } from './quantumFusion.js';
 import { RealTimeCompensator } from './thermalCompensation.js';
-import { AdvancedVerificationEngine, NISTReferenceDatabase } from './advancedVerification.js';
+import { AdvancedVerificationEngine } from './advancedVerification.js';
 
 // Crowd-sourced telemetry — anonymous, privacy-first
 import { telemetry } from './telemetry.js';
@@ -588,12 +582,19 @@ class PhonewayApp {
   }
 
   _initDisplay() {
-    this.display   = new SevenSegmentDisplay(document.getElementById('digitDisplay'), 5, 1);
-    this.stabBar   = new StabilityBar(document.getElementById('stabilityBar'));
-    this.ledPower  = new LED(document.getElementById('ledPower'));
-    this.ledStable = new LED(document.getElementById('ledStable'));
-    this.ledAudio  = new LED(document.getElementById('ledAudio'));
-    this.ledCamera = new LED(document.getElementById('ledCamera'));
+    const digitDisplay = document.getElementById('digitDisplay');
+    const stabilityBar = document.getElementById('stabilityBar');
+    const ledPower = document.getElementById('ledPower');
+    const ledStable = document.getElementById('ledStable');
+    const ledAudio = document.getElementById('ledAudio');
+    const ledCamera = document.getElementById('ledCamera');
+    
+    if (digitDisplay) this.display = new SevenSegmentDisplay(digitDisplay, 5, 1);
+    if (stabilityBar) this.stabBar = new StabilityBar(stabilityBar);
+    if (ledPower) this.ledPower = new LED(ledPower);
+    if (ledStable) this.ledStable = new LED(ledStable);
+    if (ledAudio) this.ledAudio = new LED(ledAudio);
+    if (ledCamera) this.ledCamera = new LED(ledCamera);
   }
 
   _initSensorBars() {
@@ -707,11 +708,11 @@ class PhonewayApp {
     }
 
     this.audio.onReady = () => {
-      this.ledAudio.on('green');
+      this.ledAudio?.on('green');
       this._updateSensorBar('audioBar', 0.3, 1);
     };
     this.audio.onError = (err) => {
-      this.ledAudio.on('red');
+      this.ledAudio?.on('red');
       this._showToast('Mic unavailable — audio mode disabled', 2500);
       telemetry.logSensorError('microphone', err?.message || 'unavailable');
     };
@@ -968,7 +969,7 @@ class PhonewayApp {
     }
     
     if (!this.motion.sensitivity || this.motion.sensitivity <= 0) {
-      const priorSens = this.learn.priors.getSuggested(this.settings.phoneMass || 170);
+      const priorSens = this.learn?.priors?.getSuggested?.(this.settings.phoneMass || 170);
       this.motion.sensitivity = priorSens || 150;
       this._showToast(`Using fallback sensitivity: ${this.motion.sensitivity.toFixed(1)}`, 3000);
     }
@@ -1007,7 +1008,7 @@ class PhonewayApp {
     this.camera.phoneMass    = phoneMass;
     this.camera.baselineFreq = camFreq;
     this.settings.cameraBaselineFreq = camFreq;
-    this.genSensor.setGyroCalibration(this.motion.sensitivity);
+    this.genSensor?.setGyroCalibration?.(this.motion.sensitivity);
     this.calibrationTime = Date.now();
 
     // Configure combo sensors
@@ -1019,7 +1020,7 @@ class PhonewayApp {
     this.passiveRes.phoneMass       = _calMass;
     this.passiveRes.sampleRate      = this.motion.sampleRateHz;
     this.vertAccel.sensitivity      = this.motion.sensitivity;
-    this.vertAccel.setBaseline(this.motion.raw?.az ?? 9.81);
+    this.vertAccel?.setBaseline?.(this.motion.raw?.az ?? 9.81);
 
     this._saveSettings();
 
@@ -1160,17 +1161,20 @@ class PhonewayApp {
     this._showToast('🎯 ULTRA PRECISION: Targeting ±0.05g…', 3000);
     
     // Check environmental conditions
-    const envOptimal = this.environmental.isOptimal();
+    const envOptimal = this.environmental?.isOptimal?.() ?? false;
     if (!envOptimal) {
-      const guidance = this.environmental.getGuidance();
+      const guidance = this.environmental?.getGuidance?.() || [];
       this._showToast(`⚠ ${guidance[0] || 'Wait for stable conditions'}`, 4000);
     }
     
     try {
+      if (!this.ultraPrecision) {
+        throw new Error('Ultra precision engine not initialized');
+      }
       const result = await this.ultraPrecision.measure(
         async () => {
           // Sampler function
-          const fused = this.advancedFusion.getFusedEstimate();
+          const fused = this.advancedFusion?.getFusedEstimate?.() || { grams: 0, confidence: 0 };
           return {
             grams: fused.grams,
             confidence: fused.confidence,
@@ -1184,7 +1188,7 @@ class PhonewayApp {
           minDuration: 4000,
           waitForOptimal: true,
           onProgress: (stats, progress) => {
-            this.display.setValue(stats.grams);
+            if (this.display) this.display.setValue(stats.grams);
             this._updatePrecisionDisplay(stats.precision, stats.grams);
           }
         }
@@ -1194,18 +1198,25 @@ class PhonewayApp {
       this.currentG = result.grams;
       
       // Apply ML corrections
-      const mlResult = this.ensembleCal.correct({
-        fusedGrams: result.grams,
-        sensorReadings: this._getCurrentSensorReadings(),
-        confidence: result.confidence,
-        calibrationAge: Date.now() - this.calibrationTime,
-        surfaceQuality: this.settings.surfaceQuality
-      });
-      
-      const finalGrams = mlResult.correctedGrams;
+      let finalGrams = result.grams;
+      if (this.ensembleCal) {
+        try {
+          const mlResult = this.ensembleCal.correct({
+            fusedGrams: result.grams,
+            sensorReadings: this._getCurrentSensorReadings(),
+            confidence: result.confidence,
+            calibrationAge: Date.now() - this.calibrationTime,
+            surfaceQuality: this.settings.surfaceQuality
+          });
+          finalGrams = mlResult.correctedGrams;
+        } catch (e) {
+          console.warn('ML correction failed:', e);
+          finalGrams = result.grams;
+        }
+      }
       
       // Display result
-      this.display.setValue(finalGrams);
+      if (this.display) this.display.setValue(finalGrams);
       this._updateReadout(finalGrams);
       
       const grade = this._calculateAccuracyGrade(result.precision);
@@ -1255,21 +1266,22 @@ class PhonewayApp {
   }
 
   _getCurrentSensorReadings() {
+    const readings = this.advancedFusion?.currentReadings || {};
     return {
-      accel: this.advancedFusion.currentReadings.accel?.grams || 0,
-      audio: this.advancedFusion.currentReadings.audio?.grams || 0,
-      hammer: this.advancedFusion.currentReadings.hammer?.grams || 0,
-      gyro: this.advancedFusion.currentReadings.gyro?.grams || 0,
-      touch: this.advancedFusion.currentReadings.touch?.grams || 0,
-      camera: this.advancedFusion.currentReadings.cam?.grams || 0,
+      accel: readings.accel?.grams || 0,
+      audio: readings.audio?.grams || 0,
+      hammer: readings.hammer?.grams || 0,
+      gyro: readings.gyro?.grams || 0,
+      touch: readings.touch?.grams || 0,
+      camera: readings.cam?.grams || 0,
       stability: this._getStabilityScore(),
-      batteryLevel: this._envData.batteryLevel,
-      temperature: this._envData.temperature
+      batteryLevel: this._envData?.batteryLevel,
+      temperature: this._envData?.temperature
     };
   }
 
   _getStabilityScore() {
-    if (this._stableBuf.length < 10) return 0.5;
+    if (!this._stableBuf || this._stableBuf.length < 10) return 0.5;
     const variance = this._variance(this._stableBuf);
     return 1 / (1 + variance * 100);
   }
@@ -1293,17 +1305,17 @@ class PhonewayApp {
     this._showToast('Vibrating — HAMMER + CAMERA + AUDIO active…', 3000);
     this._updateSensorBar('hammerBar', 0.5, 0.5);
 
-    this.camera.beginHammerCapture();
+    this.camera?.beginHammerCapture?.();
 
-    const result = await this.hammer.measure(4);
+    const result = await this.hammer?.measure?.(4);
 
-    const camResult = this.camera.endHammerCapture();
+    const camResult = this.camera?.endHammerCapture?.();
     if (camResult && camResult.confidence > 0.08) {
       this._sensorUpdate('cam', camResult.grams, camResult.confidence);
     }
 
-    if (this.audio.lastFreq) {
-      this.camera.validateWithAudio(this.audio.lastFreq);
+    if (this.audio?.lastFreq) {
+      this.camera?.validateWithAudio?.(this.audio.lastFreq);
     }
 
     if (result) {
@@ -1359,7 +1371,7 @@ class PhonewayApp {
     document.getElementById('btnStats')?.classList.add('btn-active');
     
     // Get quality report
-    const report = this.ultraPrecision.getQualityReport();
+    const report = this.ultraPrecision?.getQualityReport?.() || { accuracyGrade: 'untested' };
     
     // Update grade display
     const gradeDisplay = document.getElementById('accGradeDisplay');
@@ -1386,7 +1398,7 @@ class PhonewayApp {
     }
     
     if (mlSamplesEl) mlSamplesEl.textContent = report.mlMetrics?.nnSamples || '0';
-    if (verificationsEl) verificationsEl.textContent = this.learn.learnStats.verifyCount || '0';
+    if (verificationsEl) verificationsEl.textContent = this.learn?.learnStats?.verifyCount || '0';
     
     // Update recommendations
     const recList = document.getElementById('accRecList');
@@ -1409,25 +1421,28 @@ class PhonewayApp {
     const orientEl = document.getElementById('envOrient');
     const thermalEl = document.getElementById('envThermal');
     
-    if (baroEl) baroEl.textContent = envData.barometer.supported ? 
-      (envData.barometer.getStabilityScore() > 0.7 ? '✓ Stable' : '⚠ Varying') : '—';
-    if (baroEl) baroEl.className = envData.barometer.getStabilityScore() > 0.7 ? 'env-good' : 'env-warn';
+    if (baroEl && envData?.barometer) {
+      const score = envData.barometer.getStabilityScore?.() || 0;
+      baroEl.textContent = envData.barometer.supported ? 
+        (score > 0.7 ? '✓ Stable' : '⚠ Varying') : '—';
+      baroEl.className = score > 0.7 ? 'env-good' : 'env-warn';
+    }
     
-    if (battEl) {
-      const batt = envData.battery.getData();
+    if (battEl && envData?.battery) {
+      const batt = envData.battery.getData?.();
       battEl.textContent = batt ? `${Math.round(batt.level * 100)}% ${batt.charging ? '⚡' : ''}` : '—';
       battEl.className = batt?.thermalStability > 0.7 ? 'env-good' : batt?.thermalStability > 0.4 ? 'env-warn' : 'env-bad';
     }
     
-    if (orientEl) {
+    if (orientEl && envData?.orientation) {
       const orient = envData.orientation;
       orientEl.textContent = orient.supported ? 
-        (orient.isOptimal() ? '✓ Optimal' : '⚠ Adjust') : '—';
-      orientEl.className = orient.isOptimal() ? 'env-good' : 'env-warn';
+        (orient.isOptimal?.() ? '✓ Optimal' : '⚠ Adjust') : '—';
+      orientEl.className = orient.isOptimal?.() ? 'env-good' : 'env-warn';
     }
     
-    if (thermalEl) {
-      const batt = envData.battery.getData();
+    if (thermalEl && envData?.battery) {
+      const batt = envData.battery.getData?.();
       thermalEl.textContent = batt?.isStable ? '✓ Stable' : batt?.charging ? '⚡ Charging' : '⚠ Wait';
       thermalEl.className = batt?.isStable ? 'env-good' : 'env-warn';
     }
@@ -1552,19 +1567,33 @@ class PhonewayApp {
     this._activeRefW = refW;
     this.verifier.start(refW);
 
-    document.getElementById('verifyTip').style.display   = 'none';
-    document.getElementById('verifyStats').style.display  = 'flex';
-    document.getElementById('vAccBarWrap').style.display  = 'block';
-    document.getElementById('verifyLockBtn').style.display = 'block';
+    const vTip = document.getElementById('verifyTip');
+    const vStats = document.getElementById('verifyStats');
+    const vAccWrap = document.getElementById('vAccBarWrap');
+    const vLockBtn = document.getElementById('verifyLockBtn');
+    if (vTip) vTip.style.display = 'none';
+    if (vStats) vStats.style.display = 'flex';
+    if (vAccWrap) vAccWrap.style.display = 'block';
+    if (vLockBtn) vLockBtn.style.display = 'block';
 
-    document.getElementById('vExpected').textContent = refW.grams.toFixed(3);
-    document.getElementById('vTol').textContent      = `±${(refW.tolerance ?? 0.05).toFixed(3)}g`;
-    document.getElementById('vMeasured').textContent  = '---';
-    document.getElementById('vError').textContent     = '---';
-    document.getElementById('vPass').textContent      = '···';
-    document.getElementById('vPass').className        = 'vstat-pass';
-    document.getElementById('vAccPct').textContent    = '—%';
-    document.getElementById('vAccFill').style.width   = '0%';
+    const vExpected = document.getElementById('vExpected');
+    const vTol = document.getElementById('vTol');
+    const vMeasured = document.getElementById('vMeasured');
+    const vError = document.getElementById('vError');
+    const vPass = document.getElementById('vPass');
+    const vAccPct = document.getElementById('vAccPct');
+    const vAccFill = document.getElementById('vAccFill');
+    
+    if (vExpected) vExpected.textContent = refW.grams.toFixed(3);
+    if (vTol) vTol.textContent = `±${(refW.tolerance ?? 0.05).toFixed(3)}g`;
+    if (vMeasured) vMeasured.textContent = '---';
+    if (vError) vError.textContent = '---';
+    if (vPass) {
+      vPass.textContent = '···';
+      vPass.className = 'vstat-pass';
+    }
+    if (vAccPct) vAccPct.textContent = '—%';
+    if (vAccFill) vAccFill.style.width = '0%';
 
     this._haptic([10]);
     this._showToast(`Place ${refW.label} (${refW.grams.toFixed(2)}g) on phone`, 3500);
@@ -1620,7 +1649,7 @@ class PhonewayApp {
         errorGrams: error,
         errorPercent: (error / this._activeRefW.grams) * 100,
         sensorMode: MODES[this.modeIdx],
-        calibrationPoints: this.motion.calPoints.length,
+        calibrationPoints: this.motion?.calPoints?.length || 0,
         phoneModel: navigator.userAgent,
         surfaceQuality: this.settings.surfaceQuality,
         batteryLevel: this._envData.batteryLevel,
@@ -1638,13 +1667,19 @@ class PhonewayApp {
       );
       
       // Train ensemble calibrator
-      const learnResult = this.ensembleCal.learn(measured, this._activeRefW.grams, sensorReadings, {
-        mode: MODES[this.modeIdx],
-        confidence: accuracy / 100,
-        surfaceQuality: this.settings.surfaceQuality,
-        calibrationTime: this.calibrationTime,
-        calibrationAge: Date.now() - this.calibrationTime
-      });
+      if (this.ensembleCal) {
+        try {
+          this.ensembleCal.learn(measured, this._activeRefW.grams, sensorReadings, {
+            mode: MODES[this.modeIdx],
+            confidence: accuracy / 100,
+            surfaceQuality: this.settings.surfaceQuality,
+            calibrationTime: this.calibrationTime,
+            calibrationAge: Date.now() - this.calibrationTime
+          });
+        } catch (e) {
+          console.warn('Ensemble learning failed:', e);
+        }
+      }
       
       // Also train ultra-precision engine
       this.ultraPrecision.learn(measured, this._activeRefW.grams, {
@@ -1654,8 +1689,8 @@ class PhonewayApp {
         calibrationTime: this.calibrationTime
       });
       
-      if (pass && this.motion.sensitivity) {
-        const newSens = this.learn.learn(
+      if (pass && this.motion?.sensitivity) {
+        const newSens = this.learn?.learn?.(
           this._activeRefW.grams, measured, this.motion.sensitivity
         );
         if (newSens && Math.abs(newSens - this.motion.sensitivity) / this.motion.sensitivity < 0.30) {
@@ -1667,7 +1702,7 @@ class PhonewayApp {
         this._updateLearningIndicator();
         
         // Show learning progress
-        const metrics = this.ensembleCal.getQualityMetrics();
+        const metrics = this.ensembleCal?.getQualityMetrics?.() || { nnTrained: false };
         if (metrics.nnTrained) {
           this._showToast(`🧠 Neural network trained (${metrics.nnSamples} samples)`, 2000);
         }
@@ -1702,11 +1737,11 @@ class PhonewayApp {
     this._haptic([15, 10, 60]);
     this._setState('ZEROING');
     await delay(500);
-    this.fusion.setTare(this.currentG);
-    this.motion.setBaseline(this.motion.raw);
+    this.fusion?.setTare?.(this.currentG);
+    this.motion?.setBaseline?.(this.motion?.raw);
     this._stableBuf = [];
     this._setState('READY');
-    this.display.setValue(0);
+    if (this.display) this.display.setValue(0);
     this._haptic([200]);
   }
 
@@ -1719,25 +1754,26 @@ class PhonewayApp {
 
   _togglePower() {
     this.powered = !this.powered;
-    this.ledPower[this.powered ? 'on' : 'off'](this.powered ? 'green' : null);
+    this.ledPower?.[this.powered ? 'on' : 'off']?.(this.powered ? 'green' : null);
     if (this.powered) {
       this._setState('READY');
     } else {
-      this.motion.stop();
-      this.audio.stop();
-      this.camera.stop();
-      this.genSensor.stop();
-      this.environmental.stop();
+      this.motion?.stop();
+      this.audio?.stop();
+      this.camera?.stop();
+      this.genSensor?.stop();
+      this.environmental?.stop();
       if (this._watchdogInterval) {
         clearInterval(this._watchdogInterval);
         this._watchdogInterval = null;
       }
-      this.display.setValue(null);
-      this.ledStable.off();
-      this.ledAudio.off();
+      this.display?.setValue(null);
+      this.ledStable?.off();
+      this.ledAudio?.off();
       this.ledCamera?.off();
       this.state = 'OFF';
-      document.getElementById('statusText').textContent = 'OFF';
+      const statusEl = document.getElementById('statusText');
+      if (statusEl) statusEl.textContent = 'OFF';
       if (this._sensorPollInterval) {
         clearInterval(this._sensorPollInterval);
         this._sensorPollInterval = null;
@@ -1753,7 +1789,8 @@ class PhonewayApp {
 
   _cycleUnits() {
     this.unitIdx = (this.unitIdx + 1) % UNITS.length;
-    document.getElementById('unitLabel').textContent = UNITS[this.unitIdx].label;
+    const unitLabel = document.getElementById('unitLabel');
+    if (unitLabel) unitLabel.textContent = UNITS[this.unitIdx].label;
     this._haptic([12]);
     this._updateReadout(this.currentG);
   }
@@ -1761,20 +1798,21 @@ class PhonewayApp {
   _cycleMode() {
     this.modeIdx = (this.modeIdx + 1) % MODES.length;
     const mode = MODES[this.modeIdx];
-    document.getElementById('modeLabel').textContent = mode;
+    const modeLabel = document.getElementById('modeLabel');
+    if (modeLabel) modeLabel.textContent = mode;
     this._haptic([12]);
-    this.fusion.reset();
+    this.fusion?.reset();
     this._showToast(`Mode: ${mode}`, 1500);
   }
 
   _sensorUpdate(name, g, conf) {
     const modeToSensor = { 1: 'accel', 2: 'audio', 3: 'hammer', 4: 'touch', 5: 'gyro', 6: 'cam', 7: 'ensemble' };
     if (this.modeIdx === 0 || this.modeIdx === 8 || modeToSensor[this.modeIdx] === name) {
-      this.fusion.update(name, g, conf);
+      this.fusion?.update(name, g, conf);
     }
 
     if (g > 0 && conf > 0.05) {
-      this.ensemble.feed(name, g, conf);
+      this.ensemble?.feed(name, g, conf);
     }
 
     const barMap = {
@@ -1807,16 +1845,20 @@ class PhonewayApp {
 
     // Apply ML corrections in real-time
     let correctedG = g;
-    if (this.ensembleCal.nn.isTrained || this.ensembleCal.linearCorrections.size > 0) {
-      const mlResult = this.ensembleCal.correct({
-        fusedGrams: g,
-        sensorReadings: this._getCurrentSensorReadings(),
-        confidence: conf,
-        calibrationAge: Date.now() - this.calibrationTime,
-        surfaceQuality: this.settings.surfaceQuality
-      });
-      correctedG = mlResult.correctedGrams;
-      conf = mlResult.confidence;
+    if (this.ensembleCal && (this.ensembleCal.nn?.isTrained || this.ensembleCal.linearCorrections?.size > 0)) {
+      try {
+        const mlResult = this.ensembleCal.correct({
+          fusedGrams: g,
+          sensorReadings: this._getCurrentSensorReadings(),
+          confidence: conf,
+          calibrationAge: Date.now() - this.calibrationTime,
+          surfaceQuality: this.settings.surfaceQuality
+        });
+        correctedG = mlResult.correctedGrams;
+        conf = mlResult.confidence;
+      } catch (e) {
+        console.warn('ML correction failed:', e);
+      }
     }
 
     // Emergency fallback - use emergency weight directly without recursive update
@@ -1861,9 +1903,9 @@ class PhonewayApp {
     // Threshold tightened to 12% for ±0.1g target (was 20%).
     let consensusBonus = 0;
     if (correctedG > 0.1) {
-      const active = [...this.fusion.sources.values()]
+      const active = this.fusion?.sources ? [...this.fusion.sources.values()]
         .filter(s => s.confidence > 0.2 && s.estimate > 0.05)
-        .map(s => s.estimate);
+        .map(s => s.estimate) : [];
       if (active.length >= 2) {
         const sorted     = [...active].sort((a, b) => a - b);
         const median     = sorted[Math.floor(sorted.length / 2)];
@@ -1893,9 +1935,9 @@ class PhonewayApp {
     if (correctedG > 0.1) {
       this._setState(stable ? 'STABLE' : 'MEASURING');
       if (stable) {
-        const activeSensors = [...this.fusion.sources.values()]
-          .filter(s => s.confidence > 0.2).length;
-        this.learn.logReading(correctedG, accPct, activeSensors);
+        const activeSensors = this.fusion?.sources ? [...this.fusion.sources.values()]
+          .filter(s => s.confidence > 0.2).length : 0;
+        this.learn?.logReading?.(correctedG, accPct, activeSensors);
         this._pushReadingHistory(correctedG, accPct);
         this._updateLearningIndicator();
         // Report stable reading stats (bucketed weight range — no actual value)
@@ -1910,8 +1952,8 @@ class PhonewayApp {
       }
     }
 
-    if (this.verifyOpen && this.verifier.active) {
-      const vResult = this.verifier.feed(correctedG);
+    if (this.verifyOpen && this.verifier?.active) {
+      const vResult = this.verifier?.feed?.(correctedG);
       if (vResult) this._updateVerifyReadout(vResult);
     }
   }
@@ -1944,8 +1986,10 @@ class PhonewayApp {
   async _showStepOverlay(title, body) {
     const ov = document.getElementById('stepOverlay');
     if (!ov) { await delay(2000); return; }
-    ov.querySelector('.step-title').textContent = title;
-    ov.querySelector('.step-body').textContent  = body;
+    const titleEl = ov.querySelector('.step-title');
+    const bodyEl = ov.querySelector('.step-body');
+    if (titleEl) titleEl.textContent = title;
+    if (bodyEl) bodyEl.textContent = body;
     ov.style.display = 'flex';
   }
 
@@ -1975,7 +2019,7 @@ class PhonewayApp {
       'phoneway_errorLog', 'phoneway_nn_model',
       'phoneway_ensemble_corrections'
     ].forEach(k => { try { localStorage.removeItem(k); } catch {} });
-    this.learn.resetAll();
+    this.learn?.resetAll?.();
     globalErrorLogger.clear();
     this._haptic([30, 20, 30, 20, 200]);
     this._showToast('Factory reset complete — reloading…', 2000);
@@ -2015,7 +2059,7 @@ class PhonewayApp {
   _updateLearningIndicator() {
     const el = document.getElementById('mlLabel');
     if (!el) return;
-    const { verifyCount } = this.learn.learnStats;
+    const verifyCount = this.learn?.learnStats?.verifyCount || 0;
     if (verifyCount === 0) {
       el.textContent = 'ML: —';
       el.style.color  = '#333';
@@ -2067,7 +2111,7 @@ class PhonewayApp {
   }
 
   _showSurfaceTip() {
-    const sq  = this.motion.surfaceQuality;
+    const sq  = this.motion?.surfaceQuality;
     const tip = SURFACE_TIPS[sq || 'unknown'];
     if (tip) this._showToast(tip, 5000);
   }
