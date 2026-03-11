@@ -33,6 +33,8 @@ const SEG = {
   'L': [0,0,0,1,1,1,0],
   'o': [0,0,1,1,1,0,1],
   'n': [0,0,1,0,1,0,1],
+  'H': [0,1,1,0,1,1,1],
+  'd': [0,1,1,1,1,0,1],
   ' ': [0,0,0,0,0,0,0],
   '_': [0,0,0,1,0,0,0],
 };
@@ -43,22 +45,18 @@ const NAMES = ['a','b','c','d','e','f','g'];
    SevenSegmentDisplay
 ═══════════════════════════════════════════════════════════════ */
 class SevenSegmentDisplay {
-  /**
-   * @param {HTMLElement} container  — target element to build into
-   * @param {number}      digits     — total integer+decimal digit count
-   * @param {number}      decimals   — decimal places (decimal point after digit[digits-decimals-1])
-   */
-  constructor(container, digits = 4, decimals = 1) {
+  constructor(container, digits = 5, decimals = 1) {
     this.container = container;
-    this.digits    = digits;
-    this.decimals  = decimals;
-    this._els      = [];   // Array of { segs: {a-g: el}, dot: el }
-    this._current  = Array(digits).fill(' ');
-    this._dotPos   = digits - decimals - 1;  // digit index after which decimal point shows
+    this.digits = digits;
+    this.decimals = decimals;
+    this._els = [];
+    this._current = Array(digits).fill(' ');
+    this._dotPos = digits - decimals - 1;
     this._build();
   }
 
   _build() {
+    if (!this.container) return;
     this.container.innerHTML = '';
     this.container.classList.add('seg-display');
 
@@ -84,14 +82,9 @@ class SevenSegmentDisplay {
     }
   }
 
-  /**
-   * Set display to a numeric value.
-   * @param {number|null} value  — null shows "----"
-   * @param {boolean} negative
-   */
   setValue(value, negative = false) {
-    if (value === null || isNaN(value)) {
-      this._showString('----');
+    if (value === null || value === undefined || isNaN(value)) {
+      this._showString('-----');
       return;
     }
 
@@ -100,13 +93,11 @@ class SevenSegmentDisplay {
     value = Math.min(Math.abs(value), maxVal);
 
     let str = value.toFixed(this.decimals);
-    // Remove decimal point for character array (handled by CSS)
     str = str.replace(/\./g, '');
 
     // Pad left
     while (str.length < this.digits) str = ' ' + str;
     if (negative && str[0] === ' ') {
-      // Insert minus sign in first blank slot
       const firstDigit = str.search(/[0-9]/);
       const pos = Math.max(0, firstDigit - 1);
       str = str.substring(0, pos) + '-' + str.substring(pos + 1);
@@ -115,20 +106,20 @@ class SevenSegmentDisplay {
     this._showString(str);
   }
 
-  /** Show a raw string (spaces, letters, digits, '-') */
   _showString(s) {
     for (let i = 0; i < this.digits; i++) {
-      const ch   = s[i] ?? ' ';
-      const pat  = SEG[ch] ?? SEG[' '];
+      const ch = s[i] ?? ' ';
+      const pat = SEG[ch] || SEG[' '];
       const { segs } = this._els[i];
-      NAMES.forEach((name, idx) => {
-        segs[name].classList.toggle('seg-off', !pat[idx]);
-        segs[name].classList.toggle('seg-on',  !!pat[idx]);
-      });
+      if (segs) {
+        NAMES.forEach((name, idx) => {
+          segs[name].classList.toggle('seg-off', !pat[idx]);
+          segs[name].classList.toggle('seg-on', !!pat[idx]);
+        });
+      }
     }
   }
 
-  /** Flash all segments briefly (startup animation) */
   async startup() {
     this._showString('88888'.slice(0, this.digits));
     await delay(600);
@@ -141,42 +132,42 @@ class SevenSegmentDisplay {
     this.setValue(0);
   }
 
-  /** Flicker effect for unstable reading */
   flicker() {
-    this.container.classList.add('display-flicker');
-    setTimeout(() => this.container.classList.remove('display-flicker'), 400);
+    this.container?.classList.add('display-flicker');
+    setTimeout(() => this.container?.classList.remove('display-flicker'), 400);
   }
 
-  /** Error message */
   showError(code = 'Err') {
     const s = ('  ' + code).slice(-this.digits);
     this._showString(s);
   }
 
   showOverload() { this._showString(' OL '); }
-  showHold()     { this._showString('HoLd'); }
-  showCalibrate(){ this._showString('CAL '); }
-  showTare()     { this._showString('tArE'); }
-  showReady()    { this._showString('rdy '); }
+  showHold() { this._showString('HoLd'); }
+  showCalibrate() { this._showString('CAL '); }
+  showTare() { this._showString('tArE'); }
+  showReady() { this._showString('rdy '); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   StabilityBar  —  graphical stability indicator
+   StabilityBar
 ═══════════════════════════════════════════════════════════════ */
 class StabilityBar {
   constructor(el) {
     this.el = el;
     this._pct = 0;
-    this._label = el.querySelector('.stability-label');
-    this._bar   = el.querySelector('.stability-fill');
+    this._label = el?.querySelector('.stability-label');
+    this._bar = el?.querySelector('.stability-fill');
   }
 
   set(pct, stable) {
     this._pct = Math.min(100, Math.max(0, pct));
-    if (this._bar)   this._bar.style.width = this._pct + '%';
+    if (this._bar) this._bar.style.width = this._pct + '%';
     if (this._label) this._label.textContent = stable ? 'STABLE' : 'MEASURING';
-    this.el.classList.toggle('stable', stable);
-    this.el.classList.toggle('measuring', !stable);
+    if (this.el) {
+      this.el.classList.toggle('stable', stable);
+      this.el.classList.toggle('measuring', !stable);
+    }
   }
 }
 
@@ -184,37 +175,40 @@ class StabilityBar {
    LED indicator helper
 ═══════════════════════════════════════════════════════════════ */
 class LED {
-  constructor(el) { this.el = el; }
-  on(color)  { this.el.className = `led led-${color || 'green'}`; }
-  off()      { this.el.className = 'led led-off'; }
+  constructor(el) { 
+    this.el = el; 
+  }
+  on(color) { 
+    if (this.el) this.el.className = `led led-${color || 'green'}`; 
+  }
+  off() { 
+    if (this.el) this.el.className = 'led led-off'; 
+  }
   blink(ms = 500) {
     this.on();
     setTimeout(() => this.off(), ms / 2);
   }
 }
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+function delay(ms) { 
+  return new Promise(r => setTimeout(r, ms)); 
+}
 
 /* ═══════════════════════════════════════════════════════════════
-   AccuracyDisplay  —  mini 7-segment readout for accuracy %
-   Updates in real-time, same segment rendering as main display,
-   with color-coded bar and flash animation on significant changes.
+   AccuracyDisplay
 ═══════════════════════════════════════════════════════════════ */
 class AccuracyDisplay {
-  /**
-   * @param {HTMLElement} digitContainer  — .acc-seg-wrap element
-   * @param {HTMLElement} barEl           — .acc-bar-fill element
-   */
   constructor(digitContainer, barEl) {
     this.digitEl = digitContainer;
-    this.barEl   = barEl;
-    this._prev   = -1;
-    this._digits = 3;   // up to "100"
-    this._els    = [];
+    this.barEl = barEl;
+    this._prev = -1;
+    this._digits = 3;
+    this._els = [];
     this._build();
   }
 
   _build() {
+    if (!this.digitEl) return;
     this.digitEl.innerHTML = '';
     for (let i = 0; i < this._digits; i++) {
       const wrap = document.createElement('div');
@@ -231,44 +225,38 @@ class AccuracyDisplay {
     }
   }
 
-  /**
-   * Set accuracy percentage (0–100). Animates digits in real-time.
-   * @param {number} pct
-   */
   set(pct) {
     const clamped = Math.min(100, Math.max(0, Math.round(pct)));
 
-    // Flash if change is significant (> 3%)
     if (Math.abs(clamped - this._prev) >= 3 && this._prev >= 0) {
-      this.digitEl.classList.add('acc-flash');
-      setTimeout(() => this.digitEl.classList.remove('acc-flash'), 320);
+      this.digitEl?.classList.add('acc-flash');
+      setTimeout(() => this.digitEl?.classList.remove('acc-flash'), 320);
     }
     this._prev = clamped;
 
-    // Render digits
     const str = String(clamped).padStart(this._digits, ' ');
     for (let i = 0; i < this._digits; i++) {
-      const ch  = str[i] ?? ' ';
-      const pat = SEG[ch] ?? SEG[' '];
+      const ch = str[i] ?? ' ';
+      const pat = SEG[ch] || SEG[' '];
       const { segs } = this._els[i];
-      NAMES.forEach((name, idx) => {
-        segs[name].classList.toggle('seg-off',  !pat[idx]);
-        segs[name].classList.toggle('seg-on',   !!pat[idx]);
-      });
+      if (segs) {
+        NAMES.forEach((name, idx) => {
+          segs[name].classList.toggle('seg-off', !pat[idx]);
+          segs[name].classList.toggle('seg-on', !!pat[idx]);
+        });
+      }
     }
 
-    // Color-coded bar
     if (this.barEl) {
       this.barEl.style.width = clamped + '%';
       this.barEl.className = 'acc-bar-fill ' + (
         clamped >= 80 ? 'acc-high' :
         clamped >= 60 ? 'acc-good' :
-        clamped >= 35 ? 'acc-mid'  : 'acc-low'
+        clamped >= 35 ? 'acc-mid' : 'acc-low'
       );
     }
   }
 
-  /** Startup flash matching main display */
   async startup() {
     this.set(88);
     await delay(600);
