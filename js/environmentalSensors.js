@@ -64,7 +64,7 @@ class BarometerSensor {
   _onReading() {
     if (!this.sensor) return;
     
-    const pressure = this.sensor.pressure || this.sensor.reading?.pressure || null;
+    const pressure = this.sensor.pressure || (this.sensor.reading && this.sensor.reading.pressure) || null;
     if (pressure === null) return;
     
     this.pressure = pressure;
@@ -81,12 +81,14 @@ class BarometerSensor {
     // Calculate rate of change (pressure trend)
     const trend = this._calculateTrend();
     
-    this.onReading?.({
-      pressure,
-      trend,
-      isStable: Math.abs(trend) < 0.1,
-      deltaFromBaseline: this.baseline ? pressure - this.baseline : 0
-    });
+    if (this.onReading) {
+      this.onReading({
+        pressure,
+        trend,
+        isStable: Math.abs(trend) < 0.1,
+        deltaFromBaseline: this.baseline ? pressure - this.baseline : 0
+      });
+    }
   }
 
   _calculateTrend() {
@@ -123,7 +125,7 @@ class BarometerSensor {
   }
 
   stop() {
-    this.sensor?.stop();
+    if (this.sensor) this.sensor.stop();
     this.supported = false;
   }
 }
@@ -175,7 +177,7 @@ class BatteryMonitor {
       recommendedRestTime: this._getRecommendedRestTime()
     };
     
-    this.onUpdate?.(data);
+    if (this.onUpdate) this.onUpdate(data);
   }
 
   _estimateVoltage() {
@@ -347,7 +349,7 @@ class OrientationSensor {
       this.stabilityHistory.shift();
     }
     
-    this.onQualityUpdate?.(quality, this.currentOrientation);
+    if (this.onQualityUpdate) this.onQualityUpdate(quality, this.currentOrientation);
   }
 
   _calculateQuality() {
@@ -428,8 +430,8 @@ class OrientationSensor {
   }
 
   stop() {
-    this.absolute?.stop();
-    this.relative?.stop();
+    if (this.absolute) this.absolute.stop();
+    if (this.relative) this.relative.stop();
   }
 }
 

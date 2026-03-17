@@ -447,7 +447,7 @@ class AdvancedFusionEngine {
       finalConfidence = 0.7 + consensus.confidence * 0.25;
     } else if (pfUncertainty < 0.5) {
       // Particle filter is confident
-      finalEstimate = pfEstimate * 0.5 + reliabilityEstimate * 0.3 + (consensus?.estimate || 0) * 0.2;
+      finalEstimate = pfEstimate * 0.5 + reliabilityEstimate * 0.3 + ((consensus && consensus.estimate) || 0) * 0.2;
       finalConfidence = 0.6 + (1 - Math.min(1, pfUncertainty)) * 0.3;
     } else {
       // Fall back to reliability weighting
@@ -465,7 +465,7 @@ class AdvancedFusionEngine {
       confidenceInterval: ci,
       methodBreakdown: {
         particleFilter: pfEstimate,
-        consensus: consensus?.estimate || null,
+        consensus: (consensus && consensus.estimate) || null,
         reliabilityWeighted: reliabilityEstimate
       },
       outliers: this.agreementDetector.findOutliers(rawReadings).map(o => o.sensor),

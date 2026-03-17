@@ -98,7 +98,7 @@ class GenericSensorManager {
         this.linX = this._klX.update(s.x ?? 0);
         this.linY = this._klY.update(s.y ?? 0);
         this.linZ = s.z ?? 0;
-        this.onLinAccel?.(this.linX, this.linY, this.linZ);
+        if (this.onLinAccel) this.onLinAccel(this.linX, this.linY, this.linZ);
       });
       s.addEventListener('error', e => console.warn('[LinAccel]', e.error));
       s.start();
@@ -115,7 +115,7 @@ class GenericSensorManager {
         this.gravX = s.x ?? 0;
         this.gravY = s.y ?? 0;
         this.gravZ = s.z ?? 9.81;
-        this.onGravity?.(this.gravX, this.gravY, this.gravZ);
+        if (this.onGravity) this.onGravity(this.gravX, this.gravY, this.gravZ);
       });
       s.addEventListener('error', () => {});
       s.start();
@@ -132,7 +132,7 @@ class GenericSensorManager {
         this.gyroX = s.x ?? 0;
         this.gyroY = s.y ?? 0;
         this.gyroZ = s.z ?? 0;
-        this.onGyroRaw?.(this.gyroX, this.gyroY, this.gyroZ);
+        if (this.onGyroRaw) this.onGyroRaw(this.gyroX, this.gyroY, this.gyroZ);
         this._updateGyroDerived(performance.now());
       });
       s.addEventListener('error', () => {});
@@ -160,7 +160,7 @@ class GenericSensorManager {
           // Positive anomaly = ferromagnetic object placed nearby
           if (Math.abs(delta) > 2) {   // 2 µT threshold
             const confidence = Math.min(1, Math.abs(delta) / 50);
-            this.onMagAnomaly?.(delta, confidence);
+            if (this.onMagAnomaly) this.onMagAnomaly(delta, confidence);
           }
         }
       });
@@ -204,7 +204,7 @@ class GenericSensorManager {
     // Confidence from reading stability (low variance → high conf)
     const vari = this._tiltBuf.reduce((a, t) => a + (t - avg) ** 2, 0) / n;
     const conf = Math.min(0.75, 1 / (1 + Math.sqrt(vari) * 150));
-    if (conf > 0.25) this.onGyroMass?.(massG, conf);
+    if (conf > 0.25 && this.onGyroMass) this.onGyroMass(massG, conf);
   }
 
   /** Record current tilt as the "no object" baseline. */
@@ -237,7 +237,7 @@ class GenericSensorManager {
     try {
       const s = new AmbientLightSensor({ frequency: freq });
       s.addEventListener('reading', () => {
-        this.onLight?.(s.illuminance ?? 0);
+        if (this.onLight) this.onLight(s.illuminance != null ? s.illuminance : 0);
       });
       s.addEventListener('error', () => {});
       s.start();
@@ -256,11 +256,11 @@ class GenericSensorManager {
   get isFlat() { return this.tiltAngle < 0.175; } // 10 degrees in radians
 
   stop() {
-    this.linAccel?.stop();
-    this.gravity?.stop();
-    this.gyro?.stop();
-    this.magnetometer?.stop();
-    this.ambientLight?.stop();
+    if (this.linAccel) this.linAccel.stop();
+    if (this.gravity) this.gravity.stop();
+    if (this.gyro) this.gyro.stop();
+    if (this.magnetometer) this.magnetometer.stop();
+    if (this.ambientLight) this.ambientLight.stop();
   }
 }
 

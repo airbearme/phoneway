@@ -495,7 +495,7 @@ class AdvancedVerificationEngine {
       progress,
       complete: p.measurements.length >= p.trials,
       measurements: p.measurements.length,
-      currentError: last?.error,
+      currentError: last ? last.error : null,
       meanError,
       stdError,
       maxError: Math.max(...errors.map(Math.abs)),
@@ -510,7 +510,7 @@ class AdvancedVerificationEngine {
     if (!this.activeProtocol) return null;
     
     const p = this.activeProtocol;
-    const reference = p.measurements[0]?.reference;
+    const reference = p.measurements[0] ? p.measurements[0].reference : null;
     
     // SPC analysis
     const spcStatus = this.spc.getStatus(reference);
@@ -523,7 +523,7 @@ class AdvancedVerificationEngine {
     }
     
     // Uncertainty analysis
-    this.uncertaintyBudget.sources.get('repeatability').value = capability?.stdDev || 0.02;
+    this.uncertaintyBudget.sources.get('repeatability').value = (capability && capability.stdDev) || 0.02;
     const uncertaintyReport = this.uncertaintyBudget.generateReport();
     
     // Overall assessment

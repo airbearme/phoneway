@@ -133,8 +133,8 @@ class SevenSegmentDisplay {
   }
 
   flicker() {
-    this.container?.classList.add('display-flicker');
-    setTimeout(() => this.container?.classList.remove('display-flicker'), 400);
+    if (this.container) this.container.classList.add('display-flicker');
+    setTimeout(() => { if (this.container) this.container.classList.remove('display-flicker'); }, 400);
   }
 
   showError(code = 'Err') {
@@ -156,8 +156,8 @@ class StabilityBar {
   constructor(el) {
     this.el = el;
     this._pct = 0;
-    this._label = el?.querySelector('.stability-label');
-    this._bar = el?.querySelector('.stability-fill');
+    this._label = el ? el.querySelector('.stability-label') : null;
+    this._bar = el ? el.querySelector('.stability-fill') : null;
   }
 
   set(pct, stable) {
@@ -229,8 +229,8 @@ class AccuracyDisplay {
     const clamped = Math.min(100, Math.max(0, Math.round(pct)));
 
     if (Math.abs(clamped - this._prev) >= 3 && this._prev >= 0) {
-      this.digitEl?.classList.add('acc-flash');
-      setTimeout(() => this.digitEl?.classList.remove('acc-flash'), 320);
+      if (this.digitEl) this.digitEl.classList.add('acc-flash');
+      setTimeout(() => { if (this.digitEl) this.digitEl.classList.remove('acc-flash'); }, 320);
     }
     this._prev = clamped;
 

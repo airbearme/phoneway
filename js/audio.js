@@ -80,10 +80,10 @@ class AudioAnalyzer {
 
       this._phaseBuf = new Float64Array(FFT_SIZE / 2);
       this.supported = true;
-      this.onReady?.();
+      if (this.onReady) this.onReady();
     } catch (err) {
       this.supported = false;
-      this.onError?.(err);
+      if (this.onError) this.onError(err);
     }
   }
 
@@ -151,7 +151,7 @@ class AudioAnalyzer {
     this.lastFreq  = filtered;
     this.weightG   = smoothG;
     this.confidence = Math.min(1, peak.snr / 30);
-    this.onWeight?.(this.weightG, this.confidence);
+    if (this.onWeight) this.onWeight(this.weightG, this.confidence);
     return { grams: this.weightG, confidence: this.confidence, freq: filtered };
   }
 
@@ -182,7 +182,7 @@ class AudioAnalyzer {
         this.weightG   = this.mavg.update(rawG);
         this.lastFreq  = filtFreq;   // expose for camera cross-validation
         this.confidence = Math.min(1, peak.snr / 30);
-        this.onWeight?.(this.weightG, this.confidence);
+        if (this.onWeight) this.onWeight(this.weightG, this.confidence);
       }
     }
   }
@@ -210,7 +210,7 @@ class AudioAnalyzer {
    * Uses parabolic interpolation for sub-bin precision.
    */
   _findPeak(accBuf, frameCount) {
-    const sr    = this.ctx?.sampleRate ?? 44100;
+    const sr    = (this.ctx && this.ctx.sampleRate) ? this.ctx.sampleRate : 44100;
     const binHz = sr / FFT_SIZE;
     const lo    = Math.floor(F_LO / binHz);
     const hi    = Math.min(accBuf.length - 2, Math.ceil(F_HI / binHz));
@@ -248,8 +248,8 @@ class AudioAnalyzer {
 
   destroy() {
     this.stop();
-    this.micStream?.getTracks().forEach(t => t.stop());
-    this.ctx?.close();
+    if (this.micStream) this.micStream.getTracks().forEach(t => t.stop());
+    if (this.ctx) this.ctx.close();
   }
 }
 

@@ -121,7 +121,7 @@ class CameraSensor {
   stop() {
     this.active = false;
     if (this._frameTimer) { clearInterval(this._frameTimer); this._frameTimer = null; }
-    this.stream?.getTracks().forEach(t => t.stop());
+    if (this.stream) this.stream.getTracks().forEach(t => t.stop());
     this.stream    = null;
     this._prevGray = null;
   }
@@ -213,7 +213,7 @@ class CameraSensor {
       : 0;
     const isPresent  = fRatio > 1.7 || lumDiff > 0.12;
     const confidence = Math.min(0.55, Math.max(0, (fRatio - 1) * 0.35 + lumDiff * 1.8));
-    this.onPresence?.(isPresent, confidence);
+    if (this.onPresence) this.onPresence(isPresent, confidence);
   }
 
   /**
@@ -282,8 +282,8 @@ class CameraSensor {
       this._crossValConf = 0;
     }
 
-    if (report && smoothG > 0 && conf > 0.08) {
-      this.onWeight?.(smoothG, conf);
+    if (report && smoothG > 0 && conf > 0.08 && this.onWeight) {
+      this.onWeight(smoothG, conf);
     }
     return { grams: smoothG, confidence: conf, freq: filtFreq, snr };
   }
