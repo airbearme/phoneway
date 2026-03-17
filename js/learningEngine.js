@@ -33,14 +33,14 @@ class ReadingLog {
     return {
       count:        n,
       meanAccuracy: Math.round(mean),
-      p50:          Math.round(sorted[Math.floor(n * 0.50)]?.accuracy ?? 0),
-      p95:          Math.round(sorted[Math.floor(n * 0.95)]?.accuracy ?? 0),
+      p50:          Math.round((sorted[Math.floor(n * 0.50)] && sorted[Math.floor(n * 0.50)].accuracy) || 0),
+      p95:          Math.round((sorted[Math.floor(n * 0.95)] && sorted[Math.floor(n * 0.95)].accuracy) || 0),
     };
   }
 
   clear() { this._entries = []; this._save(); }
 
-  _load()  { try { return JSON.parse(localStorage.getItem(LOG_KEY) ?? '[]'); } catch { return []; } }
+  _load()  { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; } }
   _save()  { try { localStorage.setItem(LOG_KEY, JSON.stringify(this._entries)); } catch {} }
 }
 
@@ -48,9 +48,9 @@ class ReadingLog {
 class SensitivityLearner {
   constructor() {
     const s = this._load();
-    this.learnedSensitivity = s.learnedSensitivity ?? null;
-    this.verifyCount        = s.verifyCount        ?? 0;
-    this.lastError          = s.lastError          ?? null;
+    this.learnedSensitivity = s.learnedSensitivity != null ? s.learnedSensitivity : null;
+    this.verifyCount        = s.verifyCount != null ? s.verifyCount : 0;
+    this.lastError          = s.lastError != null ? s.lastError : null;
   }
 
   /**
@@ -84,7 +84,7 @@ class SensitivityLearner {
     this._save();
   }
 
-  _load() { try { return JSON.parse(localStorage.getItem(STATS_KEY) ?? '{}'); } catch { return {}; } }
+  _load() { try { return JSON.parse(localStorage.getItem(STATS_KEY) || '{}'); } catch { return {}; } }
   _save() {
     try {
       localStorage.setItem(STATS_KEY, JSON.stringify({
@@ -117,12 +117,12 @@ class CommunityPriors {
    * Buckets: 60-120, 121-160, 161-185, 186-220, 221+
    */
   getSuggested(phoneMassG) {
-    if (!this._priors?.buckets) return null;
+    if (!(this._priors && this._priors.buckets)) return null;
     const m      = phoneMassG || 170;
     const buckets = this._priors.buckets;
     const bucket = buckets.find(b => m >= b.min && m <= b.max)
-                ?? buckets[buckets.length - 1];
-    return bucket?.sensitivity ?? null;
+                || buckets[buckets.length - 1];
+    return (bucket && bucket.sensitivity) || null;
   }
 
   /**

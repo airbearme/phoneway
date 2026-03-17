@@ -89,7 +89,7 @@ class FrequencyConsensus {
     const massG   = Math.max(0, this.phoneMass * (ratio * ratio - 1));
     const conf    = Math.min(0.95, 0.80 + (best.length - 2) * 0.08);
 
-    this.onConsensus?.(massG, conf);
+    if (this.onConsensus) this.onConsensus(massG, conf);
   }
 }
 
@@ -188,7 +188,7 @@ class PassiveResonance {
     // Low confidence — no forced excitation, scales with SNR
     const conf = Math.min(0.50, (snrDb - 4) / 25 * 0.40 + 0.10);
 
-    if (massG < 500) this.onWeight?.(massG, conf);
+    if (massG < 500 && this.onWeight) this.onWeight(massG, conf);
   }
 }
 
@@ -265,7 +265,7 @@ class VerticalAccel {
     const smoothed = this._mavg.update(delta);
     const massG   = Math.max(0, smoothed * this.sensitivity);
     const conf    = Math.min(0.35, 0.35 * smoothed / 0.005);
-    if (conf > 0.01) this.onWeight?.(massG, conf);
+    if (conf > 0.01 && this.onWeight) this.onWeight(massG, conf);
   }
 }
 
@@ -329,7 +329,7 @@ class MultiSensorEnsemble {
     const consensusConf = Math.min(0.95, confSum / agreeing.length * 
       (1 + (agreeing.length - 1) * 0.1)); // Bonus for multi-sensor agreement
 
-    this.onConsensus?.(consensusG, consensusConf, agreeing.length);
+    if (this.onConsensus) this.onConsensus(consensusG, consensusConf, agreeing.length);
   }
 
   clear() {
@@ -367,7 +367,7 @@ class VarianceDetector {
     // Detect significant variance change (object placed/removed)
     const ratio = variance / (this._baselineVar || 1);
     if (ratio > 1.5 || ratio < 0.7) {
-      this.onPlacement?.(ratio > 1.5 ? 'added' : 'removed', variance);
+      if (this.onPlacement) this.onPlacement(ratio > 1.5 ? 'added' : 'removed', variance);
       this._baselineVar = variance; // Adapt to new state
     }
   }

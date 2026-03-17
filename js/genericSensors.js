@@ -95,9 +95,9 @@ class GenericSensorManager {
     try {
       const s = new LinearAccelerationSensor({ frequency: freq });
       s.addEventListener('reading', () => {
-        this.linX = this._klX.update(s.x ?? 0);
-        this.linY = this._klY.update(s.y ?? 0);
-        this.linZ = s.z ?? 0;
+        this.linX = this._klX.update(s.x != null ? s.x : 0);
+        this.linY = this._klY.update(s.y != null ? s.y : 0);
+        this.linZ = s.z != null ? s.z : 0;
         if (this.onLinAccel) this.onLinAccel(this.linX, this.linY, this.linZ);
       });
       s.addEventListener('error', e => console.warn('[LinAccel]', e.error));
@@ -112,9 +112,9 @@ class GenericSensorManager {
     try {
       const s = new GravitySensor({ frequency: freq });
       s.addEventListener('reading', () => {
-        this.gravX = s.x ?? 0;
-        this.gravY = s.y ?? 0;
-        this.gravZ = s.z ?? 9.81;
+        this.gravX = s.x != null ? s.x : 0;
+        this.gravY = s.y != null ? s.y : 0;
+        this.gravZ = s.z != null ? s.z : 9.81;
         if (this.onGravity) this.onGravity(this.gravX, this.gravY, this.gravZ);
       });
       s.addEventListener('error', () => {});
@@ -129,9 +129,9 @@ class GenericSensorManager {
     try {
       const s = new Gyroscope({ frequency: freq });
       s.addEventListener('reading', () => {
-        this.gyroX = s.x ?? 0;
-        this.gyroY = s.y ?? 0;
-        this.gyroZ = s.z ?? 0;
+        this.gyroX = s.x != null ? s.x : 0;
+        this.gyroY = s.y != null ? s.y : 0;
+        this.gyroZ = s.z != null ? s.z : 0;
         if (this.onGyroRaw) this.onGyroRaw(this.gyroX, this.gyroY, this.gyroZ);
         this._updateGyroDerived(performance.now());
       });
@@ -147,9 +147,9 @@ class GenericSensorManager {
     try {
       const s = new Magnetometer({ frequency: freq });
       s.addEventListener('reading', () => {
-        this.magX = s.x ?? 0;
-        this.magY = s.y ?? 0;
-        this.magZ = s.z ?? 0;
+        this.magX = s.x != null ? s.x : 0;
+        this.magY = s.y != null ? s.y : 0;
+        this.magZ = s.z != null ? s.z : 0;
 
         const totalB = Math.sqrt(this.magX**2 + this.magY**2 + this.magZ**2);
         const filtered = this._magKl.update(totalB);

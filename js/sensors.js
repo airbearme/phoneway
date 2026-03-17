@@ -48,7 +48,7 @@ class BaselineRecorder {
     if (this._bufX.length >= this.required) {
       this.done = true;
       const avg = a => a.reduce((s, v) => s + v, 0) / a.length;
-      this.onComplete?.({ ax: avg(this._bufX), ay: avg(this._bufY), az: avg(this._bufZ) });
+      if (this.onComplete) this.onComplete({ ax: avg(this._bufX), ay: avg(this._bufY), az: avg(this._bufZ) });
     }
   }
 
@@ -99,7 +99,7 @@ class MotionSensor {
   }
 
   async request() {
-    if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       const perm = await DeviceMotionEvent.requestPermission();
       if (perm !== 'granted') throw new Error('Motion permission denied');
     }
@@ -113,13 +113,13 @@ class MotionSensor {
       if (e.interval) this._interval = e.interval;
 
       const src = e.accelerationIncludingGravity || e.acceleration || {};
-      let ax = src.x ?? 0, ay = src.y ?? 0, az = src.z ?? 0;
+      let ax = src.x != null ? src.x : 0, ay = src.y != null ? src.y : 0, az = src.z != null ? src.z : 0;
 
       // Normalise: ensure z > 0 when face-up (Android) vs < 0 (iOS)
       if (az < 0) { ax = -ax; ay = -ay; az = -az; }
 
       this.raw = { ax, ay, az };
-      this.onRaw?.(ax, ay, az);
+      if (this.onRaw) this.onRaw(ax, ay, az);
       this._process(ax, ay, az);
     };
     window.addEventListener('devicemotion', this._handler, { passive: true });
@@ -199,10 +199,10 @@ class MotionSensor {
         });
         if (this._precisionHistory.length > 100) this._precisionHistory.shift();
         this._currentPrecision = sigma * this.sensitivity;
-        this.onPrecisionUpdate?.(this._currentPrecision, this.weightG);
+        if (this.onPrecisionUpdate) this.onPrecisionUpdate(this._currentPrecision, this.weightG);
       }
 
-      this.onWeight?.(this.weightG, this.confidence);
+      if (this.onWeight) this.onWeight(this.weightG, this.confidence);
     }
   }
 
@@ -376,12 +376,12 @@ class TouchSensor {
   _handle(e) {
     if (!e.touches.length) return;
     const t = e.touches[0];
-    let force = t.force ?? 0;
+    let force = t.force != null ? t.force : 0;
     const hasForce = t.force !== undefined && t.force > 0;
     if (!hasForce) {
       // Fallback: contact ellipse area as proxy
-      const rx = t.radiusX ?? 12;
-      const ry = t.radiusY ?? 12;
+      const rx = t.radiusX != null ? t.radiusX : 12;
+      const ry = t.radiusY != null ? t.radiusY : 12;
       force = Math.min(Math.PI * rx * ry / 700, 1);
     }
     this.supported  = hasForce;
@@ -389,7 +389,7 @@ class TouchSensor {
     const avg = this.mavg.update(force);
     this.weightG    = avg * this.sensitivity;
     this.confidence = hasForce ? 0.65 : 0.2;
-    this.onWeight?.(this.weightG, this.confidence);
+    if (this.onWeight) this.onWeight(this.weightG, this.confidence);
   }
 
   _end() {
@@ -397,7 +397,7 @@ class TouchSensor {
     this.weightG    = 0;
     this.confidence = 0;
     this.mavg.reset();
-    this.onWeight?.(0, 0);
+    if (this.onWeight) this.onWeight(0, 0);
   }
 }
 
@@ -450,7 +450,7 @@ class BayesianFusion {
         this.fusedWeight     = Math.max(0, this.smooth.update(raw) - this.tare);
         this.fusedConfidence = Math.min(1, den / this.sources.size);
       }
-      this.onFused?.(this.fusedWeight, this.fusedConfidence);
+      if (this.onFused) this.onFused(this.fusedWeight, this.fusedConfidence);
     } finally {
       this._fusing = false;
     }

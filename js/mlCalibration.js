@@ -86,8 +86,8 @@ class WeightCorrectorNN {
     features[8] = surfaceQuality === 'excellent' ? 1 : surfaceQuality === 'good' ? 0.75 : 
                   surfaceQuality === 'ok' ? 0.5 : surfaceQuality === 'poor' ? 0.25 : 0.5;
     features[9] = Math.min(1, timeSinceCalibration / (24 * 60 * 60 * 1000)); // Days
-    features[10] = batteryLevel ?? 0.5;
-    features[11] = (temperature ?? 25) / 50; // Normalized
+    features[10] = batteryLevel != null ? batteryLevel : 0.5;
+    features[11] = (temperature != null ? temperature : 25) / 50; // Normalized
     
     return features;
   }

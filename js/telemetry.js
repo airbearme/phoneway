@@ -36,8 +36,8 @@ function _capabilitySnapshot() {
     gyroscope:          typeof Gyroscope !== 'undefined',
     magnetometer:       typeof Magnetometer !== 'undefined',
     vibration:          'vibrate' in navigator,
-    microphone:         !!(navigator.mediaDevices?.getUserMedia),
-    camera:             !!(navigator.mediaDevices?.enumerateDevices),
+    microphone:         !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+    camera:             !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices),
     touch:              navigator.maxTouchPoints > 0,
     deviceClass:        _deviceClass(),
     standalone:         window.matchMedia('(display-mode: standalone)').matches,
@@ -161,7 +161,7 @@ export class Telemetry {
         });
         if (res.ok) {
           const json = await res.json().catch(() => null);
-          if (json?.globalStats) this._cacheGlobalStats(json.globalStats);
+          if (json && json.globalStats) this._cacheGlobalStats(json.globalStats);
         }
       }
     } catch {
@@ -205,17 +205,17 @@ export class Telemetry {
 
   /** Suggested sensitivity for a surface quality based on global stats */
   globalSensitivity(surfaceQuality) {
-    return this._globalStats?.sensMap?.[surfaceQuality] ?? null;
+    return (this._globalStats && this._globalStats.sensMap && this._globalStats.sensMap[surfaceQuality]) || null;
   }
 
   /** Mean verify error % across all devices (useful for UI display) */
   globalMeanError() {
-    return this._globalStats?.meanError ?? null;
+    return (this._globalStats && this._globalStats.meanError) || null;
   }
 
   /** Global pass rate (0-1) */
   globalPassRate() {
-    return this._globalStats?.passRate ?? null;
+    return (this._globalStats && this._globalStats.passRate) || null;
   }
 
   // ── Private ───────────────────────────────────────────────────

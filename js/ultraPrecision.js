@@ -469,7 +469,7 @@ class UltraPrecisionEngine {
 
   reset() {
     this.advancedFusion.reset();
-    this.currentMeasurement?.cancel();
+    if (this.currentMeasurement) this.currentMeasurement.cancel();
   }
 }
 

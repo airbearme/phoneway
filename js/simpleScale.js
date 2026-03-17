@@ -365,7 +365,7 @@ class SimpleScale {
   }
   
   async requestPermission() {
-    if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
         const result = await DeviceMotionEvent.requestPermission();
         return result === 'granted';
@@ -399,9 +399,9 @@ class SimpleScale {
     const accel = e.accelerationIncludingGravity;
     if (!accel) return;
     
-    let x = accel.x ?? 0;
-    let y = accel.y ?? 0;
-    let z = accel.z ?? 0;
+    let x = accel.x != null ? accel.x : 0;
+    let y = accel.y != null ? accel.y : 0;
+    let z = accel.z != null ? accel.z : 0;
     
     if (z < 0) {
       x = -x;
@@ -410,7 +410,7 @@ class SimpleScale {
     }
     
     this.rawAccel = { x, y, z };
-    this.onRaw?.(x, y, z);
+    if (this.onRaw) this.onRaw(x, y, z);
     
     this.filteredAccel = {
       x: this.kalmanX.update(x),
@@ -465,7 +465,7 @@ class SimpleScale {
     const trulyStable = this.stableCounter > 15;
     
     if (trulyStable && !this.isStable && rawG > 0.2) {
-      this.onStable?.(emaFiltered);
+      if (this.onStable) this.onStable(emaFiltered);
     }
     this.isStable = trulyStable;
     
@@ -484,7 +484,7 @@ class SimpleScale {
     
     this.confidence = (stabilityScore * 0.35 + signalStrength * 0.25 + calibrationScore * 0.25 + surfaceScore * 0.15);
     
-    this.onWeight?.(this.displayWeight, this.confidence, this.isStable);
+    if (this.onWeight) this.onWeight(this.displayWeight, this.confidence, this.isStable);
   }
   
   _getSurfaceQualityScore() {
@@ -648,7 +648,7 @@ class SimpleScale {
       meanError,
       stdDev,
       maxError: Math.max(...errors.map(Math.abs)),
-      accuracy: this.verificationHistory[this.verificationHistory.length - 1]?.accuracy || 0
+      accuracy: (this.verificationHistory[this.verificationHistory.length - 1] && this.verificationHistory[this.verificationHistory.length - 1].accuracy) || 0
     };
   }
   

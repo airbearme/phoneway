@@ -108,7 +108,7 @@ class SevenSegmentDisplay {
 
   _showString(s) {
     for (let i = 0; i < this.digits; i++) {
-      const ch = s[i] ?? ' ';
+      const ch = s[i] != null ? s[i] : ' ';
       const pat = SEG[ch] || SEG[' '];
       const { segs } = this._els[i];
       if (segs) {
@@ -236,7 +236,7 @@ class AccuracyDisplay {
 
     const str = String(clamped).padStart(this._digits, ' ');
     for (let i = 0; i < this._digits; i++) {
-      const ch = str[i] ?? ' ';
+      const ch = str[i] != null ? str[i] : ' ';
       const pat = SEG[ch] || SEG[' '];
       const { segs } = this._els[i];
       if (segs) {

@@ -483,7 +483,7 @@ class AutoCalibrator {
     
     for (let i = 0; i < knownWeights.length; i++) {
       const weight = knownWeights[i];
-      onProgress?.(i / knownWeights.length, `Measuring ${weight}g...`);
+      if (onProgress) onProgress(i / knownWeights.length, 'Measuring ' + weight + 'g...');
       
       // Take multiple measurements for accuracy
       const measurements = [];
@@ -519,7 +519,7 @@ class AutoCalibrator {
   }
 
   _calculateSensitivity(results) {
-    if (results.length < 2) return results[0]?.measured / results[0]?.known || 150;
+    if (results.length < 2) return (results[0] && results[0].measured) / (results[0] && results[0].known) || 150;
     
     // Linear regression for sensitivity
     const n = results.length;

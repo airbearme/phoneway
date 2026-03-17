@@ -54,7 +54,7 @@ class VibrationHammer {
     this._buf.push(Math.sqrt(ax * ax + ay * ay));
     if (this._buf.length >= this._targetSamples) {
       this._active = false;
-      this._resolve?.(this._analyze([...this._buf]));
+      if (this._resolve) this._resolve(this._analyze([...this._buf]));
       this._resolve = null;
     }
   }
@@ -90,7 +90,7 @@ class VibrationHammer {
     const freqs      = [];
     const confs      = [];
     for (let i = 0; i < n; i++) {
-      onProgress?.(i, n);
+      if (onProgress) onProgress(i, n);
       const r = await this.excite();
       // If first attempt gets no data, accelerometer is unavailable — stop immediately
       if (r === null && i === 0) return null;
@@ -135,7 +135,7 @@ class VibrationHammer {
     const smoothG = this.mavg.update(rawG);
     this.weightG    = Math.max(0, smoothG);
     this.confidence = r.confidence;
-    this.onWeight?.(this.weightG, this.confidence);
+    if (this.onWeight) this.onWeight(this.weightG, this.confidence);
     return { grams: this.weightG, confidence: this.confidence, freq };
   }
 

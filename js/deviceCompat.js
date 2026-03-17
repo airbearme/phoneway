@@ -307,7 +307,7 @@ class UniversalSensorAdapter {
     
     accel.addEventListener('reading', () => {
       this.lastReading = { x: accel.x, y: accel.y, z: accel.z };
-      if (this.callbacks.motion) this.callbacks.motion(this.lastReading);
+      if (this.callbacks && this.callbacks.motion) this.callbacks.motion(this.lastReading);
     });
     
     accel.addEventListener('error', (e) => {
@@ -333,9 +333,9 @@ class UniversalSensorAdapter {
       const accel = e.accelerationIncludingGravity || e.acceleration;
       if (!accel) return;
       
-      let x = accel.x ?? 0;
-      let y = accel.y ?? 0;
-      let z = accel.z ?? 0;
+      let x = accel.x != null ? accel.x : 0;
+      let y = accel.y != null ? accel.y : 0;
+      let z = accel.z != null ? accel.z : 0;
       
       // Normalize orientation
       if (z < 0) {
@@ -345,7 +345,7 @@ class UniversalSensorAdapter {
       }
       
       this.lastReading = { x, y, z };
-      if (this.callbacks.motion) this.callbacks.motion(this.lastReading);
+      if (this.callbacks && this.callbacks.motion) this.callbacks.motion(this.lastReading);
     };
     
     window.addEventListener('devicemotion', this._motionHandler, { passive: true });

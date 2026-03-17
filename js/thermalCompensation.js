@@ -234,10 +234,10 @@ class ThermalModel {
       const saved = localStorage.getItem('phoneway_thermal_model');
       if (saved) {
         const data = JSON.parse(saved);
-        this.COEF_ACCEL = data.COEF_ACCEL ?? this.COEF_ACCEL;
-        this.COEF_SURFACE = data.COEF_SURFACE ?? this.COEF_SURFACE;
-        this.COEF_BATTERY = data.COEF_BATTERY ?? this.COEF_BATTERY;
-        this.ambientTemp = data.ambientTemp ?? this.ambientTemp;
+        this.COEF_ACCEL = data.COEF_ACCEL != null ? data.COEF_ACCEL : this.COEF_ACCEL;
+        this.COEF_SURFACE = data.COEF_SURFACE != null ? data.COEF_SURFACE : this.COEF_SURFACE;
+        this.COEF_BATTERY = data.COEF_BATTERY != null ? data.COEF_BATTERY : this.COEF_BATTERY;
+        this.ambientTemp = data.ambientTemp != null ? data.ambientTemp : this.ambientTemp;
         if (data.driftHistory) {
           this.driftHistory = data.driftHistory;
         }
