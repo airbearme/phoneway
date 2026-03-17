@@ -3,7 +3,7 @@
 ## Quick Start - One-Click Install
 
 The app is already deployed and live at:
-**https://phoneway-scale.vercel.app**
+**https://phoneway-scales.vercel.app**
 
 ### Install on Your Device (Any Platform)
 

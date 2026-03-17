@@ -1,7 +1,7 @@
 # Phoneway v4.1.1 - Quick Start
 
 ## 🚀 Live Now
-**https://phoneway-scale.vercel.app**
+**https://phoneway-scales.vercel.app**
 
 ## 📱 Install in 10 Seconds
 
