@@ -36,7 +36,7 @@ This project has achieved the target of **tenth-of-a-gram accuracy** (±0.1g, wi
 ## 🔧 Deployment Status
 
 ### ✅ Manual Deployment Complete
-App is live at: **https://phoneway-rouge.vercel.app**
+App is live at: **https://phoneway-scale.vercel.app**
 
 ### ⏳ Auto-Deployment Setup (Optional)
 To enable automatic deployment on push to `main`:
