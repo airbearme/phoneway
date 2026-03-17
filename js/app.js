@@ -41,9 +41,31 @@ const APP_VERSION = '4.1.1';
 
 class PhonewayApp {
   constructor() {
-    this.scale = new SimpleScale();
-    this.storage = new UniversalStorage();
-    this.permissions = new PermissionHelper();
+    console.log('[Phoneway] Constructing app...');
+    
+    try {
+      this.scale = new SimpleScale();
+      console.log('[Phoneway] SimpleScale created');
+    } catch (e) {
+      console.error('[Phoneway] Failed to create SimpleScale:', e);
+      throw e;
+    }
+    
+    try {
+      this.storage = new UniversalStorage();
+      console.log('[Phoneway] UniversalStorage created');
+    } catch (e) {
+      console.error('[Phoneway] Failed to create UniversalStorage:', e);
+      throw e;
+    }
+    
+    try {
+      this.permissions = new PermissionHelper();
+      console.log('[Phoneway] PermissionHelper created');
+    } catch (e) {
+      console.error('[Phoneway] Failed to create PermissionHelper:', e);
+      throw e;
+    }
     
     // UI elements
     this.display = null;
@@ -80,10 +102,17 @@ class PhonewayApp {
       console.log('[Phoneway] v' + APP_VERSION + ' initializing...');
       console.log('[Phoneway] Device info:', getDeviceInfo());
       
+      // Wait for DOM to be ready
+      if (document.readyState === 'loading') {
+        await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, {once: true}));
+      }
+      
       this._initDisplay();
       this._bindButtons();
       this._buildCalWeightList();
       this._buildVerifyPanel();
+      
+      console.log('[Phoneway] UI initialized, binding buttons...');
       
       // Check device capabilities
       if (!DeviceCapabilities.hasDeviceMotion) {
@@ -191,8 +220,15 @@ class PhonewayApp {
   _bindButtons() {
     const bind = (id, handler) => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener('click', handler);
+      if (el) {
+        el.addEventListener('click', handler);
+        console.log('[Phoneway] Bound button:', id);
+      } else {
+        console.warn('[Phoneway] Button not found:', id);
+      }
     };
+    
+    console.log('[Phoneway] Binding buttons...');
     
     bind('btnPower', () => this._togglePower());
     bind('btnTare', () => this._tare());
@@ -257,6 +293,7 @@ class PhonewayApp {
   }
 
   _togglePower() {
+    console.log('[Phoneway] Toggle power clicked, current state:', this.powered);
     this.powered = !this.powered;
     
     if (this.ledPower) {
@@ -807,14 +844,21 @@ class PhonewayApp {
 }
 
 // Bootstrap with error handling
+console.log('[Phoneway] Module loaded, bootstrapping...');
+
 try {
   const app = new PhonewayApp();
-  app.init().catch(err => {
+  console.log('[Phoneway] App instance created');
+  
+  app.init().then(() => {
+    console.log('[Phoneway] App initialized successfully');
+  }).catch(err => {
     console.error('[Phoneway] Bootstrap error:', err);
   });
   
   // Expose for debugging
   window.phoneway = app;
+  console.log('[Phoneway] App exposed as window.phoneway');
 } catch (e) {
   console.error('[Phoneway] Fatal initialization error:', e);
   document.body.innerHTML = '<div style="padding: 20px; color: #ff4444; text-align: center;">' +
