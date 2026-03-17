@@ -33,16 +33,8 @@
     }
   ],
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/api/telemetry", "destination": "/api/telemetry.js" },
-    { "source": "/api/stats", "destination": "/api/stats.js" },
-    { "source": "/api/errors", "destination": "/api/errors.js" }
+    { "source": "/", "destination": "/index.html" }
   ],
-  "functions": {
-    "api/*.js": {
-      "runtime": "edge"
-    }
-  },
   "buildCommand": null,
   "outputDirectory": ".",
   "framework": null,
