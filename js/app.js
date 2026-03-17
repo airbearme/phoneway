@@ -108,6 +108,7 @@ class PhonewayApp {
       }
       
       this._initDisplay();
+      this._updateAccuracyDisplay(0); // Initialize accuracy to 0
       this._bindButtons();
       this._buildCalWeightList();
       this._buildVerifyPanel();
@@ -349,9 +350,32 @@ class PhonewayApp {
     this._updateSurfaceLabel();
     this._updateGradeLabel();
     this._updatePrecisionLabel();
+    this._updateAccuracyDisplay(confidence);
     
     if (this._selectedRefWeight && isStable) {
       this._updateVerifyComparison();
+    }
+  }
+
+  _updateAccuracyDisplay(confidence) {
+    const accPct = Math.min(100, Math.max(0, Math.round(confidence * 100)));
+    
+    // Update accuracy digits
+    const accDigits = document.getElementById('accDigits');
+    if (accDigits) {
+      accDigits.textContent = accPct;
+    }
+    
+    // Update accuracy bar
+    const accBar = document.getElementById('accBar');
+    if (accBar) {
+      accBar.style.width = accPct + '%';
+      // Color coding based on accuracy
+      accBar.className = 'acc-bar-fill ' + (
+        accPct >= 80 ? 'acc-high' :
+        accPct >= 60 ? 'acc-good' :
+        accPct >= 35 ? 'acc-mid' : 'acc-low'
+      );
     }
   }
 
