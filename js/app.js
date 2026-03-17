@@ -109,6 +109,7 @@ class PhonewayApp {
       
       this._initDisplay();
       this._updateAccuracyDisplay(0); // Initialize accuracy to 0
+      this._updateCalibrationGuide(); // Initialize calibration guide
       this._bindButtons();
       this._buildCalWeightList();
       this._buildVerifyPanel();
@@ -351,6 +352,7 @@ class PhonewayApp {
     this._updateGradeLabel();
     this._updatePrecisionLabel();
     this._updateAccuracyDisplay(confidence);
+    this._updateCalibrationGuide();
     
     if (this._selectedRefWeight && isStable) {
       this._updateVerifyComparison();
@@ -428,6 +430,46 @@ class PhonewayApp {
     }
   }
 
+  _updateCalibrationGuide() {
+    const guide = document.getElementById('calGuide');
+    if (!guide) return;
+    
+    const calQuality = this.scale.getCalibrationQuality();
+    const isCalibrated = this.scale.calibrated && calQuality.points >= 1;
+    
+    // Show guide if not calibrated
+    if (!isCalibrated) {
+      guide.classList.add('show');
+      
+      // Update step indicators
+      const step1 = document.getElementById('calStep1');
+      const step2 = document.getElementById('calStep2');
+      const step3 = document.getElementById('calStep3');
+      const step4 = document.getElementById('calStep4');
+      
+      // Reset all steps
+      [step1, step2, step3, step4].forEach(step => {
+        if (step) {
+          step.classList.remove('active', 'completed');
+        }
+      });
+      
+      // Determine current step
+      if (!this._pendingCalibration) {
+        // Step 1: Press CAL button
+        if (step1) step1.classList.add('active');
+      } else if (this._pendingCalibration && !this.scale.calibrated) {
+        // Step 2-3: Calibration in progress
+        if (step1) step1.classList.add('completed');
+        if (step2) step2.classList.add('completed');
+        if (step3) step3.classList.add('active');
+      }
+    } else {
+      // Hide guide when calibrated
+      guide.classList.remove('show');
+    }
+  }
+
   async _tare() {
     if (!this.powered) return;
     
@@ -447,6 +489,8 @@ class PhonewayApp {
             this._showToast(`Tip: Add ${4-points} more weights for better accuracy`, 4000);
           }, 4500);
         }
+        // Update calibration guide to hide it
+        this._updateCalibrationGuide();
       } else {
         this._showToast('Cal failed: ' + result.error, 4000);
       }
@@ -547,6 +591,7 @@ class PhonewayApp {
     
     this._showToast(`Step 2: Place ${this.calWeightG}g weight, then press TARE to calibrate`, 5000);
     this._pendingCalibration = true;
+    this._updateCalibrationGuide();
     
     this._setState('READY');
   }
