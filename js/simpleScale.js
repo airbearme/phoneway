@@ -756,17 +756,46 @@ class SimpleScale {
         verificationHistory: this.verificationHistory,
         timestamp: Date.now()
       };
-      localStorage.setItem('phoneway_v4_calibration', JSON.stringify(cal));
+      // Try localStorage first, fallback to memory if unavailable
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('phoneway_v4_calibration', JSON.stringify(cal));
+      }
+      // Also store in window for session persistence
+      window._phonewayCal = cal;
     } catch (e) {
       console.log('Could not save calibration:', e);
+      // Fallback to memory storage
+      window._phonewayCal = {
+        sensitivity: this.sensitivity,
+        baseline: this.baseline,
+        calibrated: this.calibrated,
+        multiCal: {
+          points: this.multiCal.points,
+          degree: this.multiCal.degree
+        },
+        verificationHistory: this.verificationHistory,
+        timestamp: Date.now()
+      };
     }
   }
   
   _loadCalibration() {
     try {
-      const saved = localStorage.getItem('phoneway_v4_calibration');
+      let saved = null;
+      
+      // Try localStorage first
+      if (typeof localStorage !== 'undefined') {
+        saved = localStorage.getItem('phoneway_v4_calibration');
+      }
+      
+      // Fallback to memory storage
+      if (!saved && window._phonewayCal) {
+        saved = JSON.stringify(window._phonewayCal);
+      }
+      
       if (saved) {
         const cal = JSON.parse(saved);
+        // Calibration valid for 30 days
         if (cal.timestamp && Date.now() - cal.timestamp < 30 * 24 * 60 * 60 * 1000) {
           if (cal.sensitivity && cal.baseline) {
             this.sensitivity = cal.sensitivity;
@@ -812,8 +841,15 @@ class SimpleScale {
     this.stableCounter = 0;
     
     try {
-      localStorage.removeItem('phoneway_v4_calibration');
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('phoneway_v4_calibration');
+      }
     } catch (e) {}
+    
+    // Clear memory fallback
+    if (window._phonewayCal) {
+      delete window._phonewayCal;
+    }
   }
 }
 

@@ -114,11 +114,21 @@ export default async function handler(req) {
   const url    = new URL(req.url);
   const key    = url.searchParams.get('key') || '';
   const secret = viewerKey();
+  
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
 
   if (!secret || key !== secret) {
     return new Response('Unauthorized', {
       status: 401,
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'text/plain', ...corsHeaders },
     });
   }
 
@@ -126,7 +136,7 @@ export default async function handler(req) {
 
   if (url.searchParams.get('json') === '1') {
     return new Response(JSON.stringify(data, null, 2), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   }
 
@@ -134,6 +144,7 @@ export default async function handler(req) {
     headers: {
       'Content-Type':  'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
+      ...corsHeaders
     },
   });
 }

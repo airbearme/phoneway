@@ -9,7 +9,7 @@
 
 export const config = { runtime: 'edge' };
 
-const BLOB_BASE   = 'https://xxogfqf3bfaznkdp.public.blob.vercel-storage.com';
+const BLOB_BASE   = process.env.BLOB_BASE_URL || 'https://xxogfqf3bfaznkdp.public.blob.vercel-storage.com';
 const BLOB_UPLOAD = 'https://blob.vercel-storage.com';
 const EMA         = 0.08;  // ~12-event rolling average
 const MAX_ERRORS  = 200;   // rolling error log cap
@@ -169,31 +169,44 @@ function aggregate(existing, events, deviceClass) {
 }
 
 export default async function handler(req) {
+  // CORS headers for all responses
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
+      headers: corsHeaders,
     });
   }
 
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
+    return new Response('Method Not Allowed', { 
+      status: 405,
+      headers: corsHeaders
+    });
   }
 
   let body;
-  try { body = await req.json(); }
-  catch { return new Response('Bad Request', { status: 400 }); }
+  try { 
+    body = await req.json(); 
+  }
+  catch { 
+    return new Response('Bad Request', { 
+      status: 400,
+      headers: corsHeaders
+    }); 
+  }
 
   const { events = [], deviceClass = 'android' } = body;
   const cls = String(deviceClass).toLowerCase().replace(/[^a-z]/g, '').slice(0, 20);
 
   if (!Array.isArray(events) || events.length === 0) {
     return new Response(JSON.stringify({ received: true, count: 0 }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   }
 
@@ -209,11 +222,12 @@ export default async function handler(req) {
   const otherEvents = safe.filter(e => e.type !== 'js_error');
 
   let globalStats = null;
+  const hasBlob = !!blobToken();
 
-  if (blobToken()) {
+  if (hasBlob) {
     // Write JS errors to privacy-safe error log (fire-and-forget)
     if (jsErrors.length > 0) {
-      appendErrors(jsErrors, cls).catch(e => console.error('[telemetry] errors blob:', e?.message));
+      appendErrors(jsErrors, cls).catch(() => {});
     }
     // Aggregate accuracy/calibration/verify stats
     if (otherEvents.length > 0) {
@@ -232,7 +246,12 @@ export default async function handler(req) {
   }
 
   return new Response(
-    JSON.stringify({ received: true, count: safe.length, globalStats }),
-    { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+    JSON.stringify({ 
+      received: true, 
+      count: safe.length, 
+      globalStats,
+      blobEnabled: hasBlob
+    }),
+    { headers: { 'Content-Type': 'application/json', ...corsHeaders } }
   );
 }

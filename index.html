@@ -15,7 +15,7 @@
 
 <script>
 // Version check and auto-update
-const APP_VERSION = '4.1.0';
+const APP_VERSION = '4.1.1';
 const storedVersion = localStorage.getItem('phoneway_version');
 if (storedVersion && storedVersion !== APP_VERSION) {
   if ('caches' in window) {
@@ -301,7 +301,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
   <!-- ── Footer ─────────────────────────────────────────────── -->
   <div id="footer">
     <div class="footer-stack">
-      <div class="footer-text">PHONEWAY v3 · 15-SENSOR ULTRA · NN-ENHANCED · 0.1g TARGET</div>
+      <div class="footer-text">PHONEWAY v4.1 · 15-SENSOR ULTRA · NN-ENHANCED · 0.1g TARGET</div>
       <div class="footer-credit">CREATED BY <span class="credit-name">STEVE B</span> AKA <span class="credit-handle">CODEN809</span></div>
     </div>
     <div class="footer-gems">
@@ -663,7 +663,38 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 </script>
 
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=4.1.1"></script>
+
+<!-- Service Worker Registration -->
+<script>
+(function() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/sw.js?v=4.1.1')
+        .then(function(registration) {
+          console.log('[SW] Registered:', registration.scope);
+          
+          // Check for updates
+          registration.addEventListener('updatefound', function() {
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', function() {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[SW] New version available');
+                // Show update notification
+                if (confirm('New version available! Reload to update?')) {
+                  window.location.reload();
+                }
+              }
+            });
+          });
+        })
+        .catch(function(error) {
+          console.log('[SW] Registration failed:', error);
+        });
+    });
+  }
+})();
+</script>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
@@ -731,7 +762,8 @@ window.addEventListener('beforeinstallprompt', e => {
 });
 
 // Mobile banner install button - MUST be user gesture
-document.getElementById('installBtn')?.addEventListener('click', async () => {
+const installBtn = document.getElementById('installBtn');
+if (installBtn) installBtn.addEventListener('click', async () => {
   if (!_dip) {
     _showManualInstallInstructions();
     return;
@@ -752,7 +784,8 @@ document.getElementById('installBtn')?.addEventListener('click', async () => {
 });
 
 // Desktop modal install button
-document.getElementById('desktopInstallBtn')?.addEventListener('click', async () => {
+const desktopInstallBtn = document.getElementById('desktopInstallBtn');
+if (desktopInstallBtn) desktopInstallBtn.addEventListener('click', async () => {
   if (!_dip) {
     _showManualInstallInstructions();
     return;
@@ -772,11 +805,13 @@ document.getElementById('desktopInstallBtn')?.addEventListener('click', async ()
   }
 });
 
-document.getElementById('desktopInstallCancel')?.addEventListener('click', () => {
+const desktopInstallCancel = document.getElementById('desktopInstallCancel');
+if (desktopInstallCancel) desktopInstallCancel.addEventListener('click', () => {
   document.getElementById('desktopInstallModal').style.display = 'none';
 });
 
-document.getElementById('installDismiss')?.addEventListener('click', () => {
+const installDismiss = document.getElementById('installDismiss');
+if (installDismiss) installDismiss.addEventListener('click', () => {
   document.getElementById('installBanner').classList.remove('show');
 });
 
@@ -846,9 +881,12 @@ if (isIos && isSafari && !isStandalone) {
 // Check if already installed (for returning users)
 if (isStandalone) {
   // Already installed - hide all prompts
-  document.getElementById('installBanner')?.remove();
-  document.getElementById('desktopInstallModal')?.remove();
-  document.getElementById('iosHint')?.remove();
+  const installBanner = document.getElementById('installBanner');
+  if (installBanner) installBanner.remove();
+  const desktopInstallModal2 = document.getElementById('desktopInstallModal');
+  if (desktopInstallModal2) desktopInstallModal2.remove();
+  const iosHint = document.getElementById('iosHint');
+  if (iosHint) iosHint.remove();
 }
 </script>
 
