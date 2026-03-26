@@ -314,6 +314,11 @@ class TemperatureCompensator {
 
 /**
  * SimpleScale — High-accuracy weight measurement
+ *
+ * Core precision technique: average SIGNED dx/dy separately through an 80-sample
+ * moving average, then compute the magnitude AFTER averaging. This eliminates the
+ * Rayleigh bias that afflicts magnitude-first approaches — when the true signal is
+ * near zero, averaging signed components cancels noise while sqrt(noise²) does not.
  */
 class SimpleScale {
   constructor() {
@@ -321,49 +326,56 @@ class SimpleScale {
     this.calibrated = false;
     this.baseline = null;
     this.sensitivity = 150;
-    
-    // Multi-point calibration
+
     this.multiCal = new MultiPointCalibration();
     this.tempComp = new TemperatureCompensator();
-    
-    // Raw readings
-    this.rawAccel = { x: 0, y: 0, z: 9.8 };
+
+    this.rawAccel      = { x: 0, y: 0, z: 9.8 };
     this.filteredAccel = { x: 0, y: 0, z: 9.8 };
-    
-    // Output values
-    this.rawWeight = 0;
+
+    this.rawWeight    = 0;
     this.displayWeight = 0;
-    this.confidence = 0;
-    this.isStable = false;
-    
-    // Filters
-    this.displayFilter = new MovingAverage(50);
-    this.stabilityCheck = new MovingAverage(30);
-    this.kalmanX = new SimpleKalman({ R: 0.05, Q: 0.005 });
-    this.kalmanY = new SimpleKalman({ R: 0.05, Q: 0.005 });
-    this.kalmanZ = new SimpleKalman({ R: 0.1, Q: 0.01 });
-    this.emaWeight = new EMA(0.2);
-    
-    // Deadband
-    this.deadbandThreshold = 0.1;
-    this.lastDisplayValue = 0;
-    this.stableCounter = 0;
-    
-    // Sample tracking
-    this.lastTime = 0;
+    this.confidence   = 0;
+    this.isStable     = false;
+
+    // Signed-delta MAs — the key to eliminating Rayleigh bias
+    this.maDx = new MovingAverage(80);
+    this.maDy = new MovingAverage(80);
+
+    // Kalman: tighter noise model for precision measurement
+    this.kalmanX = new SimpleKalman({ R: 0.002, Q: 0.0002 });
+    this.kalmanY = new SimpleKalman({ R: 0.002, Q: 0.0002 });
+    this.kalmanZ = new SimpleKalman({ R: 0.005, Q: 0.0005 });
+
+    // Output smoothing and stability
+    this.emaWeight     = new EMA(0.12);
+    this.stabilityCheck = new MovingAverage(40);
+
+    // 0.05 g deadband for ±0.1 g display resolution
+    this.deadbandThreshold = 0.05;
+    this.lastDisplayValue  = 0;
+    this.stableCounter     = 0;
+
+    // Event-driven tare state
+    this._tare_in_progress   = false;
+    this._tare_target        = 100;  // samples to collect
+    this._tare_warmup        = 20;   // samples to discard (Kalman settling)
+    this._tare_warmup_count  = 0;
+    this._tare_xs            = [];
+    this._tare_ys            = [];
+    this._tare_zs            = [];
+    this._tare_resolve       = null;
+
     this.sampleRate = 60;
-    
-    // Verification history
     this.verificationHistory = [];
-    
-    // Callbacks
+
     this.onWeight = null;
-    this.onRaw = null;
+    this.onRaw    = null;
     this.onStable = null;
-    
+
     this._loadCalibration();
   }
-  
+
   async requestPermission() {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
@@ -376,216 +388,237 @@ class SimpleScale {
     }
     return true;
   }
-  
+
   start() {
     if (this.active) return;
-    
     this._handler = (e) => this._handleMotion(e);
     window.addEventListener('devicemotion', this._handler, { passive: true });
     this.active = true;
-    
     if (!this.baseline) {
       setTimeout(() => this.tare(), 1000);
     }
   }
-  
+
   stop() {
     if (!this.active) return;
     window.removeEventListener('devicemotion', this._handler);
     this.active = false;
   }
-  
+
   _handleMotion(e) {
     const accel = e.accelerationIncludingGravity;
     if (!accel) return;
-    
+
     let x = accel.x != null ? accel.x : 0;
     let y = accel.y != null ? accel.y : 0;
     let z = accel.z != null ? accel.z : 0;
-    
-    if (z < 0) {
-      x = -x;
-      y = -y;
-      z = -z;
-    }
-    
+
+    // Normalise face-up / face-down orientation
+    if (z < 0) { x = -x; y = -y; z = -z; }
+
     this.rawAccel = { x, y, z };
     if (this.onRaw) this.onRaw(x, y, z);
-    
+
     this.filteredAccel = {
       x: this.kalmanX.update(x),
       y: this.kalmanY.update(y),
       z: this.kalmanZ.update(z)
     };
-    
+
+    // Event-driven tare: collect Kalman-filtered samples after warmup
+    if (this._tare_in_progress) {
+      if (this._tare_warmup_count < this._tare_warmup) {
+        this._tare_warmup_count++;
+      } else {
+        this._tare_xs.push(this.filteredAccel.x);
+        this._tare_ys.push(this.filteredAccel.y);
+        this._tare_zs.push(this.filteredAccel.z);
+
+        if (this._tare_xs.length >= this._tare_target) {
+          this._tare_in_progress = false;
+          this.baseline = {
+            x: this._trimmedMean(this._tare_xs),
+            y: this._trimmedMean(this._tare_ys),
+            z: this._trimmedMean(this._tare_zs)
+          };
+
+          // Reset delta filters so they start fresh from the new baseline
+          this.maDx.reset();
+          this.maDy.reset();
+          this.stabilityCheck.reset();
+          this.emaWeight.reset();
+          this.stableCounter    = 0;
+          this.displayWeight    = 0;
+          this.lastDisplayValue = 0;
+          this.rawWeight        = 0;
+
+          console.log('Tared with baseline:', this.baseline);
+          if (this._tare_resolve) { this._tare_resolve(); this._tare_resolve = null; }
+        }
+      }
+    }
+
     this._process();
   }
-  
+
   _process() {
     if (!this.baseline) return;
-    
+
     const dx = this.filteredAccel.x - this.baseline.x;
     const dy = this.filteredAccel.y - this.baseline.y;
-    const deltaHorizontal = Math.sqrt(dx * dx + dy * dy);
-    
-    let rawG;
-    
-    // Use multi-point calibration if available, otherwise linear
-    if (this.multiCal.coeffs && this.multiCal.points.length >= 2) {
-      rawG = this.multiCal.estimate(deltaHorizontal);
-    } else {
-      rawG = deltaHorizontal * this.sensitivity;
-    }
-    
-    // Apply temperature compensation
-    rawG = this.tempComp.compensate(rawG);
-    
-    // Noise floor
-    if (rawG < 0.1) {
-      rawG = 0;
-    }
-    
+
+    // Average signed deltas FIRST, then compute magnitude
+    const avgDx = this.maDx.update(dx);
+    const avgDy = this.maDy.update(dy);
+    const deltaHorizontal = Math.sqrt(avgDx * avgDx + avgDy * avgDy);
+
+    let rawG = (this.multiCal.coeffs && this.multiCal.points.length >= 2)
+      ? this.multiCal.estimate(deltaHorizontal)
+      : deltaHorizontal * this.sensitivity;
+
+    rawG = Math.max(0, rawG);
+    rawG = Math.max(0, this.tempComp.compensate(rawG));
+
+    // 0.05 g noise floor
+    if (rawG < 0.05) rawG = 0;
+
     this.rawWeight = rawG;
     this.stabilityCheck.update(rawG);
-    
-    const filtered = this.displayFilter.update(rawG);
-    const emaFiltered = this.emaWeight.update(filtered);
-    
-    // Stability detection
-    const variance = this.stabilityCheck.variance;
-    const stdDev = Math.sqrt(variance);
-    const isNowStable = this.stabilityCheck.isFull && stdDev < 0.2;
-    
-    if (isNowStable) {
-      this.stableCounter++;
-    } else {
-      this.stableCounter = 0;
-    }
-    
-    const trulyStable = this.stableCounter > 15;
-    
-    if (trulyStable && !this.isStable && rawG > 0.2) {
-      if (this.onStable) this.onStable(emaFiltered);
+
+    const stdDev     = this.stabilityCheck.stdDev;
+    const isNowStable = this.stabilityCheck.isFull && stdDev < 0.08;
+
+    if (isNowStable) { this.stableCounter++; } else { this.stableCounter = 0; }
+    const trulyStable = this.stableCounter > 25;
+
+    const emaG = this.emaWeight.update(rawG);
+
+    if (trulyStable && !this.isStable && rawG > 0.1) {
+      if (this.onStable) this.onStable(emaG);
     }
     this.isStable = trulyStable;
-    
+
     // Deadband
-    const displayChange = Math.abs(emaFiltered - this.lastDisplayValue);
-    if (displayChange >= this.deadbandThreshold || emaFiltered < 0.1) {
-      this.displayWeight = emaFiltered;
-      this.lastDisplayValue = emaFiltered;
+    if (Math.abs(emaG - this.lastDisplayValue) >= this.deadbandThreshold || emaG < 0.05) {
+      this.displayWeight    = emaG;
+      this.lastDisplayValue = emaG;
     }
-    
-    // Confidence calculation
-    const stabilityScore = Math.max(0, 1 - stdDev / 0.3);
-    const signalStrength = Math.min(1, this.rawWeight / 3);
-    const calibrationScore = this.calibrated ? (this.multiCal.points.length >= 3 ? 1 : 0.7) : 0.3;
-    const surfaceScore = this._getSurfaceQualityScore();
-    
-    this.confidence = (stabilityScore * 0.35 + signalStrength * 0.25 + calibrationScore * 0.25 + surfaceScore * 0.15);
-    
+
+    // Confidence
+    const stabilityScore   = Math.max(0, 1 - stdDev / 0.15);
+    const calPoints        = this.multiCal.getPointCount();
+    const calibrationScore = this.calibrated
+      ? (calPoints >= 3 ? 1.0 : calPoints >= 2 ? 0.8 : 0.6) : 0.3;
+    const surfaceScore     = this._getSurfaceQualityScore();
+    const signalScore      = this.calibrated ? 0.9 : Math.min(1, this.rawWeight / 2);
+
+    this.confidence = stabilityScore * 0.40 + signalScore * 0.20 +
+                      calibrationScore * 0.25 + surfaceScore * 0.15;
+
     if (this.onWeight) this.onWeight(this.displayWeight, this.confidence, this.isStable);
   }
-  
+
+  /** Trimmed mean: drop top and bottom `trimPct` fraction to reject impulse noise. */
+  _trimmedMean(values, trimPct = 0.1) {
+    if (values.length < 4) return values.reduce((a, b) => a + b, 0) / values.length;
+    const sorted = [...values].sort((a, b) => a - b);
+    const n = Math.floor(sorted.length * trimPct);
+    const trimmed = sorted.slice(n, sorted.length - n);
+    return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+  }
+
   _getSurfaceQualityScore() {
     if (!this.calibrated) return 0.3;
     if (this.sensitivity > 250) return 1.0;
     if (this.sensitivity > 150) return 0.85;
-    if (this.sensitivity > 80) return 0.6;
+    if (this.sensitivity > 80)  return 0.6;
     return 0.3;
   }
-  
+
+  /**
+   * Tare — event-driven, 20-sample Kalman warmup then 100-sample trimmed-mean baseline.
+   * Returns a Promise that resolves when the baseline is locked.
+   */
   tare() {
     this.kalmanX.reset();
     this.kalmanY.reset();
     this.kalmanZ.reset();
-    this.displayFilter.reset();
+    this.maDx.reset();
+    this.maDy.reset();
     this.stabilityCheck.reset();
     this.emaWeight.reset();
     this.stableCounter = 0;
     this.tempComp.calibrateZero();
-    
-    let samples = 0;
-    let sumX = 0, sumY = 0, sumZ = 0;
-    const maxSamples = 40;
-    
-    const sampleInterval = setInterval(() => {
-      sumX += this.filteredAccel.x;
-      sumY += this.filteredAccel.y;
-      sumZ += this.filteredAccel.z;
-      samples++;
-      
-      if (samples >= maxSamples) {
-        clearInterval(sampleInterval);
-        
-        this.baseline = {
-          x: sumX / samples,
-          y: sumY / samples,
-          z: sumZ / samples
-        };
-        
-        this.displayWeight = 0;
-        this.lastDisplayValue = 0;
-        this.rawWeight = 0;
-        
-        console.log('Tared with baseline:', this.baseline);
-      }
-    }, 40);
+
+    this._tare_xs           = [];
+    this._tare_ys           = [];
+    this._tare_zs           = [];
+    this._tare_warmup_count = 0;
+    this._tare_in_progress  = true;
+
+    console.log(`Tare started — ${this._tare_warmup} warmup + ${this._tare_target} samples`);
+
+    return new Promise(resolve => {
+      this._tare_resolve = resolve;
+      // Safety timeout: finalise with whatever we have after 5 s
+      setTimeout(() => {
+        if (!this._tare_in_progress) return;
+        this._tare_in_progress = false;
+        if (this._tare_xs.length >= 10) {
+          this.baseline = {
+            x: this._trimmedMean(this._tare_xs),
+            y: this._trimmedMean(this._tare_ys),
+            z: this._trimmedMean(this._tare_zs)
+          };
+          this.maDx.reset(); this.maDy.reset();
+          this.stabilityCheck.reset(); this.emaWeight.reset();
+          this.stableCounter = 0; this.displayWeight = 0;
+          this.lastDisplayValue = 0; this.rawWeight = 0;
+        }
+        if (this._tare_resolve) { this._tare_resolve(); this._tare_resolve = null; }
+      }, 5000);
+    });
   }
-  
+
   calibrate(knownGrams) {
-    if (!this.baseline) {
-      return { success: false, error: 'Must tare first' };
-    }
-    
-    if (!this.isStable) {
-      return { success: false, error: 'Wait for stable reading' };
-    }
-    
-    const dx = this.filteredAccel.x - this.baseline.x;
-    const dy = this.filteredAccel.y - this.baseline.y;
-    const deltaA = Math.sqrt(dx * dx + dy * dy);
-    
+    if (!this.baseline)   return { success: false, error: 'Must tare first' };
+    if (!this.isStable)   return { success: false, error: 'Wait for stable reading' };
+    if (!this.maDx.isFull) return { success: false, error: 'Still settling — wait a moment' };
+
+    // Use filtered, averaged deltas for maximum accuracy
+    const avgDx = this.maDx.mean;
+    const avgDy = this.maDy.mean;
+    const deltaA = Math.sqrt(avgDx * avgDx + avgDy * avgDy);
+
     if (deltaA < 0.0005) {
       return { success: false, error: 'Signal too weak - use softer surface or heavier weight' };
     }
-    
-    // Add to multi-point calibration
+
     this.multiCal.addPoint(knownGrams, deltaA);
-    
-    // Update simple sensitivity for fallback
+
     const newSensitivity = knownGrams / deltaA;
-    if (this.calibrated) {
-      this.sensitivity = 0.7 * newSensitivity + 0.3 * this.sensitivity;
-    } else {
-      this.sensitivity = newSensitivity;
-    }
-    
+    this.sensitivity = this.calibrated
+      ? 0.7 * newSensitivity + 0.3 * this.sensitivity
+      : newSensitivity;
+
     this.calibrated = true;
     this._saveCalibration();
-    
-    // Estimate accuracy
-    let estimatedAccuracy;
+
     const r2 = this.multiCal.quality;
-    if (this.sensitivity > 300 && r2 > 0.98) {
-      estimatedAccuracy = `±0.2g (excellent, R²=${r2.toFixed(3)})`;
-    } else if (this.sensitivity > 200 && r2 > 0.95) {
-      estimatedAccuracy = `±0.3g (very good, R²=${r2.toFixed(3)})`;
-    } else if (this.sensitivity > 120 && r2 > 0.90) {
-      estimatedAccuracy = `±0.5g (good, R²=${r2.toFixed(3)})`;
-    } else if (this.sensitivity > 60) {
-      estimatedAccuracy = `±1g (ok, R²=${r2.toFixed(3)})`;
-    } else {
-      estimatedAccuracy = `±2g (poor, R²=${r2.toFixed(3)})`;
-    }
-    
+    let estimatedAccuracy;
+    if      (this.sensitivity > 300 && r2 > 0.98) estimatedAccuracy = `±0.1g (excellent, R²=${r2.toFixed(3)})`;
+    else if (this.sensitivity > 200 && r2 > 0.95) estimatedAccuracy = `±0.2g (very good, R²=${r2.toFixed(3)})`;
+    else if (this.sensitivity > 120 && r2 > 0.90) estimatedAccuracy = `±0.3g (good, R²=${r2.toFixed(3)})`;
+    else if (this.sensitivity > 60)               estimatedAccuracy = `±0.5g (ok, R²=${r2.toFixed(3)})`;
+    else                                          estimatedAccuracy = `±1g (poor, R²=${r2.toFixed(3)})`;
+
     return {
       success: true,
       sensitivity: this.sensitivity,
       accuracy: estimatedAccuracy,
       calibrationPoints: this.multiCal.getPointCount(),
-      r2: r2,
-      deltaA: deltaA
+      r2,
+      deltaA
     };
   }
   
@@ -721,9 +754,9 @@ class SimpleScale {
   
   getDeltaA() {
     if (!this.baseline) return 0;
-    const dx = this.filteredAccel.x - this.baseline.x;
-    const dy = this.filteredAccel.y - this.baseline.y;
-    return Math.sqrt(dx * dx + dy * dy);
+    const avgDx = this.maDx.mean;
+    const avgDy = this.maDy.mean;
+    return Math.sqrt(avgDx * avgDx + avgDy * avgDy);
   }
   
   getSurfaceQuality() {
@@ -832,24 +865,23 @@ class SimpleScale {
     this.kalmanX.reset();
     this.kalmanY.reset();
     this.kalmanZ.reset();
-    this.displayFilter.reset();
+    this.maDx.reset();
+    this.maDy.reset();
     this.stabilityCheck.reset();
     this.emaWeight.reset();
-    this.displayWeight = 0;
-    this.rawWeight = 0;
+    this.displayWeight    = 0;
+    this.rawWeight        = 0;
     this.lastDisplayValue = 0;
-    this.stableCounter = 0;
-    
+    this.stableCounter    = 0;
+    this._tare_in_progress = false;
+
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('phoneway_v4_calibration');
       }
     } catch (e) {}
-    
-    // Clear memory fallback
-    if (window._phonewayCal) {
-      delete window._phonewayCal;
-    }
+
+    if (window._phonewayCal) delete window._phonewayCal;
   }
 }
 

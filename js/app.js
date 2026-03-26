@@ -472,37 +472,36 @@ class PhonewayApp {
 
   async _tare() {
     if (!this.powered) return;
-    
+
     this._holdActive = false;
-    
+
     if (this._pendingCalibration && this.currentG > 0.2) {
       this._pendingCalibration = false;
-      
+
       const result = this.scale.calibrate(this.calWeightG);
       if (result.success) {
         const points = result.calibrationPoints;
         this._showToast(`Calibrated! ${result.accuracy} (${points} points)`, 4000);
         hapticFeedback([30, 50, 30]);
-        
+
         if (points < 3) {
           setTimeout(() => {
-            this._showToast(`Tip: Add ${4-points} more weights for better accuracy`, 4000);
+            this._showToast(`Tip: Add ${4 - points} more weights for better accuracy`, 4000);
           }, 4500);
         }
-        // Update calibration guide to hide it
         this._updateCalibrationGuide();
       } else {
         this._showToast('Cal failed: ' + result.error, 4000);
       }
       return;
     }
-    
+
     hapticFeedback([50]);
     this._setState('ZEROING');
-    await delay(300);
-    
-    this.scale.tare();
-    
+    this._showToast('Taring — hold phone perfectly still...', 4000);
+
+    await this.scale.tare();
+
     this._setState('READY');
     if (this.display) this.display.setValue(0);
     this._showToast('Tared — scale zeroed', 2000);
@@ -581,18 +580,16 @@ class PhonewayApp {
   async _startCalibration() {
     const onboardModal2 = document.getElementById('onboardModal');
     if (onboardModal2 && onboardModal2.style) onboardModal2.style.display = 'none';
-    
+
     this._setState('CALIBRATING');
-    
-    this._showToast('Step 1: Remove all weight, then press TARE', 5000);
-    
-    await delay(2000);
-    this.scale.tare();
-    
-    this._showToast(`Step 2: Place ${this.calWeightG}g weight, then press TARE to calibrate`, 5000);
+    this._showToast('Step 1: Remove all weight — taring...', 5000);
+
+    // Wait for tare to fully settle (100 samples + 20 warmup ≈ 2 s at 60 Hz)
+    await this.scale.tare();
+
+    this._showToast(`Step 2: Place ${this.calWeightG}g weight, then press TARE to calibrate`, 6000);
     this._pendingCalibration = true;
     this._updateCalibrationGuide();
-    
     this._setState('READY');
   }
 
