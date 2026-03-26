@@ -361,23 +361,50 @@ class PhonewayApp {
 
   _updateAccuracyDisplay(confidence) {
     const accPct = Math.min(100, Math.max(0, Math.round(confidence * 100)));
-    
-    // Update accuracy digits
+
     const accDigits = document.getElementById('accDigits');
-    if (accDigits) {
-      accDigits.textContent = accPct;
-    }
-    
-    // Update accuracy bar
+    if (accDigits) accDigits.textContent = accPct;
+
     const accBar = document.getElementById('accBar');
     if (accBar) {
       accBar.style.width = accPct + '%';
-      // Color coding based on accuracy
       accBar.className = 'acc-bar-fill ' + (
         accPct >= 80 ? 'acc-high' :
         accPct >= 60 ? 'acc-good' :
         accPct >= 35 ? 'acc-mid' : 'acc-low'
       );
+    }
+
+    // Realistic precision estimate shown under the bar
+    const precEl = document.getElementById('precEst');
+    if (precEl) {
+      const cal    = this.scale.getCalibrationQuality();
+      const surf   = this.scale.getSurfaceQuality();
+      const pts    = cal.points;
+      const r2     = cal.r2 || 0;
+      let text, color;
+
+      if (!this.scale.calibrated || pts === 0) {
+        text = 'UNCAL'; color = '#444';
+      } else if (pts === 1) {
+        if (surf === 'excellent')     { text = '~±0.3g'; color = '#e8c84a'; }
+        else if (surf === 'good')     { text = '~±0.5g'; color = '#ffcc00'; }
+        else                          { text = '~±1g';   color = '#ff8c00'; }
+      } else if (pts === 2) {
+        // 2-point linear fit is always exact (r²=1) so use surface as proxy
+        if (surf === 'excellent')     { text = '~±0.2g'; color = '#39ff14'; }
+        else if (surf === 'good')     { text = '~±0.3g'; color = '#e8c84a'; }
+        else                          { text = '~±0.5g'; color = '#ffcc00'; }
+      } else {
+        // 3+ points: r² is meaningful
+        if      (r2 > 0.97 && surf === 'excellent') { text = '~±0.1g'; color = '#00ff66'; }
+        else if (r2 > 0.92)                          { text = '~±0.2g'; color = '#39ff14'; }
+        else if (r2 > 0.85)                          { text = '~±0.3g'; color = '#e8c84a'; }
+        else                                         { text = '~±0.5g'; color = '#ffcc00'; }
+      }
+
+      precEl.textContent  = text;
+      precEl.style.color  = color;
     }
   }
 

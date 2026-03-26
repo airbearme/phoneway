@@ -504,16 +504,16 @@ class SimpleScale {
       this.lastDisplayValue = emaG;
     }
 
-    // Confidence
-    const stabilityScore   = Math.max(0, 1 - stdDev / 0.15);
-    const calPoints        = this.multiCal.getPointCount();
-    const calibrationScore = this.calibrated
-      ? (calPoints >= 3 ? 1.0 : calPoints >= 2 ? 0.8 : 0.6) : 0.3;
-    const surfaceScore     = this._getSurfaceQualityScore();
-    const signalScore      = this.calibrated ? 0.9 : Math.min(1, this.rawWeight / 2);
+    // Confidence — calibration multiplier makes the % realistic:
+    // uncalibrated max ~35%, 1-pt ~65%, 2-pt ~85%, 3-pt+ ~100%
+    const stabilityScore = Math.max(0, 1 - stdDev / 0.15);
+    const surfaceScore   = this._getSurfaceQualityScore();
+    const signalScore    = this.calibrated ? 0.9 : Math.min(1, this.rawWeight / 2);
+    const calPoints      = this.multiCal.getPointCount();
+    const calMult        = !this.calibrated ? 0.35 :
+                           (calPoints >= 3 ? 1.0 : calPoints >= 2 ? 0.85 : 0.70);
 
-    this.confidence = stabilityScore * 0.40 + signalScore * 0.20 +
-                      calibrationScore * 0.25 + surfaceScore * 0.15;
+    this.confidence = (stabilityScore * 0.50 + signalScore * 0.20 + surfaceScore * 0.30) * calMult;
 
     if (this.onWeight) this.onWeight(this.displayWeight, this.confidence, this.isStable);
   }

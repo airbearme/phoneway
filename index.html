@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover"/>
   <meta name="mobile-web-app-capable"                content="yes"/>
   <meta name="apple-mobile-web-app-capable"          content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -11,7 +11,60 @@
   <title>Phoneway v4.1 — Ultra-Precision Scale</title>
   <link rel="manifest"          href="manifest.json?v=4.1.0"/>
   <link rel="apple-touch-icon"  href="icons/icon.svg"/>
-  <link rel="stylesheet"        href="css/style.css?v=4.1.0"/>
+  <link rel="stylesheet"        href="css/style.css?v=4.2.0"/>
+<style>
+/* ── Precision estimate label (under accuracy bar) ────────── */
+.prec-est{text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;
+  letter-spacing:1px;color:#555;margin-top:2px;transition:color .4s}
+
+/* ── Accuracy block — tappable for guide ──────────────────── */
+#accuracyBlock{cursor:pointer;-webkit-tap-highlight-color:rgba(201,162,39,.15)}
+
+/* ══ Button Tooltip Overlay ══════════════════════════════════ */
+#btnTooltip{position:fixed;inset:0;z-index:60000;display:flex;align-items:center;
+  justify-content:center;padding:18px}
+.tip-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.88);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.tip-card{position:relative;background:#1a1a1a;border:2px solid #c9a227;
+  border-radius:16px;padding:20px;max-width:360px;width:100%;
+  box-shadow:0 0 48px rgba(201,162,39,.45),0 20px 60px rgba(0,0,0,.85);
+  animation:tipIn .18s ease-out}
+@keyframes tipIn{from{opacity:0;transform:scale(.9) translateY(16px)}
+                 to  {opacity:1;transform:scale(1) translateY(0)}}
+.tip-header{display:flex;align-items:center;gap:12px;margin-bottom:14px;
+  padding-bottom:12px;border-bottom:1px solid #2a2a2a}
+.tip-icon{font-size:30px;line-height:1;flex-shrink:0}
+.tip-title{flex:1;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;
+  color:#e8c84a;letter-spacing:2px}
+.tip-close{background:#2a2a2a;border:1px solid #444;color:#888;width:30px;height:30px;
+  border-radius:50%;font-size:17px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;line-height:1}
+.tip-desc{font-size:12px;line-height:1.75;color:#ccc;margin-bottom:12px}
+.tip-tips-label{font-size:8px;letter-spacing:2px;color:#555;margin-bottom:6px}
+.tip-list{margin:0;padding-left:16px;font-size:11px;color:#aaa;line-height:1.9}
+.tip-accuracy{margin-top:12px;padding:8px 12px;background:#0a1a0a;
+  border:1px solid #1a3a1a;border-radius:6px;font-size:10px;
+  color:#39ff14;letter-spacing:1px}
+.tip-footer{margin-top:14px;text-align:center;font-size:8px;
+  letter-spacing:2px;color:#3a3a3a}
+
+/* ══ Accuracy / Setup Guide Overlay ═════════════════════════ */
+.guide-section{margin-bottom:18px}
+.guide-section-title{font-size:9px;letter-spacing:2px;color:#c9a227;
+  margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #2a2a2a}
+.guide-steps{display:flex;flex-direction:column;gap:6px}
+.guide-step{padding:8px 10px;background:#111;border-left:3px solid #7a5c00;
+  border-radius:0 4px 4px 0;font-size:11px;line-height:1.65;color:#bbb}
+.guide-step strong{color:#e8c84a}
+.guide-table{width:100%;border-collapse:collapse;font-size:11px}
+.guide-table td{padding:5px 8px;border-bottom:1px solid #1a1a1a;color:#aaa;
+  vertical-align:middle}
+.guide-grade{color:#39ff14;font-size:10px;letter-spacing:.5px;text-align:right}
+.guide-note{margin-top:8px;font-size:10px;color:#555;line-height:1.65;font-style:italic}
+.guide-issue{padding:6px 0;border-bottom:1px solid #191919;font-size:11px;
+  color:#888;line-height:1.65}
+.guide-issue strong{color:#e8c84a}
+</style>
 
 <script>
 // Version check and auto-update
@@ -55,6 +108,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
       <div class="acc-bar-wrap">
         <div class="acc-bar-fill" id="accBar"></div>
       </div>
+      <div id="precEst" class="prec-est">UNCAL</div>
       <div class="header-leds" style="margin-top:4px">
         <div class="led-group"><span class="led-lbl">PWR</span><div class="led led-off" id="ledPower"></div></div>
         <div class="led-group"><span class="led-lbl">STB</span><div class="led led-off" id="ledStable"></div></div>
@@ -691,15 +745,296 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 })();
 </script>
 
+<!-- ══════════════════════════════════════════════════════════
+     BUTTON TOOLTIP OVERLAY (long-press any button for help)
+═══════════════════════════════════════════════════════════ -->
+<div id="btnTooltip" style="display:none">
+  <div class="tip-backdrop"></div>
+  <div class="tip-card">
+    <div class="tip-header">
+      <span id="tipIcon"  class="tip-icon">⚙️</span>
+      <span id="tipTitle" class="tip-title">BUTTON HELP</span>
+      <button id="tipClose" class="tip-close">×</button>
+    </div>
+    <p id="tipDesc" class="tip-desc"></p>
+    <div class="tip-tips-label">TIPS:</div>
+    <ul id="tipList" class="tip-list"></ul>
+    <div id="tipAccuracy" class="tip-accuracy" style="display:none"></div>
+    <div class="tip-footer">HOLD ANY BUTTON 0.5s FOR HELP · TAP TO DISMISS</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     ACCURACY / SETUP GUIDE OVERLAY
+     Opened by tapping the ACCURACY block in the header.
+═══════════════════════════════════════════════════════════ -->
+<div id="guideOverlay" class="verify-panel" style="display:none; max-height:88vh; overflow-y:auto">
+  <div class="verify-header">
+    <div>
+      <div class="verify-title">MAXIMIZE ACCURACY</div>
+      <div class="verify-sub">SETUP GUIDE · TIPS · REFERENCE WEIGHTS</div>
+    </div>
+    <button class="verify-close" id="guideClose">×</button>
+  </div>
+
+  <div style="padding:16px;font-size:11px;line-height:1.7;color:#ccc">
+
+    <!-- Quick setup checklist -->
+    <div class="guide-section">
+      <div class="guide-section-title">QUICK SETUP FOR ±0.1g</div>
+      <div class="guide-steps">
+        <div class="guide-step"><strong>1.</strong> Place phone on a <strong>soft surface</strong> — mouse pad, folded cloth, or thick notebook. <strong>NOT</strong> a hard table.</div>
+        <div class="guide-step"><strong>2.</strong> Phone <strong>face-up, flat, not tilted</strong>. Even 5° of tilt reduces accuracy.</div>
+        <div class="guide-step"><strong>3.</strong> <strong>Not charging</strong> during use. Charging cable adds vibration and thermal drift.</div>
+        <div class="guide-step"><strong>4.</strong> Wait <strong>5 minutes after charging</strong> before measuring — let phone cool to ambient temperature.</div>
+        <div class="guide-step"><strong>5.</strong> Press <strong>CAL</strong> → use a nickel (5.000g) as primary weight, dollar bill (1.00g) as 2nd point.</div>
+        <div class="guide-step"><strong>6.</strong> Press <strong>VERIFY</strong> after each calibration — this trains the accuracy engine over time.</div>
+      </div>
+    </div>
+
+    <!-- Surface quality -->
+    <div class="guide-section">
+      <div class="guide-section-title">SURFACE QUALITY — BIGGEST FACTOR</div>
+      <table class="guide-table">
+        <tr><td>★★★★</td><td>Foam mouse pad, 5+ layers cloth</td>     <td class="guide-grade" style="color:#00ff66">Excellent</td></tr>
+        <tr><td>★★★☆</td><td>Thick notebook, paperback book</td>       <td class="guide-grade">Good</td></tr>
+        <tr><td>★★☆☆</td><td>Magazine, thin paperback</td>              <td class="guide-grade" style="color:#ffcc00">OK</td></tr>
+        <tr><td>★☆☆☆</td><td>Hard desk, countertop, glass</td>         <td class="guide-grade" style="color:#ff6b00">Poor</td></tr>
+      </table>
+      <div class="guide-note">Physics: the soft surface acts as a spring. Weight compresses it → phone tilts slightly → accelerometer detects the tilt change. Softer surface = more deflection = stronger signal = better accuracy.</div>
+    </div>
+
+    <!-- Reference weights -->
+    <div class="guide-section">
+      <div class="guide-section-title">US REFERENCE WEIGHTS</div>
+      <table class="guide-table">
+        <tr><td>💵 Dollar bill</td>  <td>1.000g ±0.030g</td><td class="guide-grade">Good 2nd point</td></tr>
+        <tr><td>🪙 Penny post-1982</td><td>2.500g ±0.013g</td><td class="guide-grade">Good</td></tr>
+        <tr><td>🪙 Nickel ★</td>     <td>5.000g ±0.008g</td><td class="guide-grade" style="color:#00ff66">Best primary</td></tr>
+        <tr><td>🪙 Dime</td>         <td>2.268g ±0.010g</td><td class="guide-grade">Good</td></tr>
+        <tr><td>🪙 Quarter</td>      <td>5.670g ±0.013g</td><td class="guide-grade">Good</td></tr>
+      </table>
+    </div>
+
+    <!-- Accuracy grades -->
+    <div class="guide-section">
+      <div class="guide-section-title">ACCURACY GRADES & PRECISION ESTIMATES</div>
+      <table class="guide-table">
+        <tr><td style="color:#00ff66;font-weight:bold">A+</td><td>±0.1g</td><td>Lab quality — 3+ cal points, excellent surface</td></tr>
+        <tr><td style="color:#39ff14;font-weight:bold">A</td> <td>±0.2g</td><td>Target — 2 cal points, good surface</td></tr>
+        <tr><td style="color:#e8c84a;font-weight:bold">B</td> <td>±0.3g</td><td>Very good — 1 cal point, good surface</td></tr>
+        <tr><td style="color:#ffcc00;font-weight:bold">C</td> <td>±0.5g</td><td>Good — add more calibration points</td></tr>
+        <tr><td style="color:#ff8c00;font-weight:bold">D</td> <td>±1g</td>  <td>Recalibrate on a softer surface</td></tr>
+        <tr><td style="color:#555">UNCAL</td>                 <td>±2g+</td> <td>No calibration — results unreliable</td></tr>
+      </table>
+    </div>
+
+    <!-- Accuracy %% explanation -->
+    <div class="guide-section">
+      <div class="guide-section-title">WHAT THE ACCURACY % MEANS</div>
+      <div style="background:#111;padding:10px;border-radius:6px;line-height:1.8">
+        The <strong style="color:#e8c84a">%</strong> is a real-time <strong style="color:#e8c84a">signal quality score</strong> — it rises when you are calibrated and the phone is perfectly still, and drops when the phone moves or is uncalibrated.<br><br>
+        The <strong style="color:#39ff14">~±Xg</strong> label under the bar is the <strong style="color:#39ff14">precision estimate</strong> — the realistic gram-accuracy you can expect based on your calibration quality and surface. This is the number that really matters.
+      </div>
+    </div>
+
+    <!-- Common issues -->
+    <div class="guide-section">
+      <div class="guide-section-title">TROUBLESHOOTING</div>
+      <div class="guide-issue"><strong>Display drifts with nothing on it:</strong> Thermal drift from charging. Unplug and wait 5 min, then re-TARE.</div>
+      <div class="guide-issue"><strong>Won't read below 1g:</strong> Surface too hard. Switch to a mouse pad or folded cloth.</div>
+      <div class="guide-issue"><strong>Accuracy worse than ±0.5g after cal:</strong> Add a second calibration point (use CAL again with a different weight).</div>
+      <div class="guide-issue"><strong>No sensor reading / always 0:</strong> Motion permission denied — check browser/site settings and reload.</div>
+      <div class="guide-issue"><strong>Noisy / jumping display:</strong> External vibration (fan, traffic). Move to a still location or use 0.1g PRECISION mode.</div>
+      <div class="guide-issue"><strong>iOS — no permission prompt:</strong> Open in Safari (not in-app browser). Tap Share → Add to Home Screen.</div>
+    </div>
+
+    <div style="text-align:center;color:#333;font-size:9px;margin-top:8px;letter-spacing:1px">
+      TAP THE ACCURACY DISPLAY IN THE HEADER TO REOPEN THIS GUIDE
+    </div>
+  </div>
+
+  <div class="verify-btns">
+    <button class="modal-btn modal-btn-secondary" id="guideCloseBtn">GOT IT</button>
+  </div>
+</div>
+
+
+<!-- ── Tooltip + Guide JS ────────────────────────────────── -->
+<script>
+(function() {
+'use strict';
+
+/* ── Button help data ──────────────────────────────────── */
+var BTN_HELP = {
+  btnTare: {
+    icon:'⚖️', title:'TARE / ZERO',
+    desc:'Sets the zero point. Press with NOTHING on the phone so the display reads 0g. During calibration: place your known weight FIRST, then press TARE to register that weight.',
+    tips:['Hold phone perfectly still for ~2 s after pressing','CAL MODE: place known weight → press TARE','Re-tare if display drifts upward on an empty scale','The scale takes 100 sensor samples for its baseline — wait 2s'],
+    accuracy:'Critical — quality tare = accurate zero baseline'
+  },
+  btnMode: {
+    icon:'🔄', title:'MEASUREMENT MODE',
+    desc:'Cycles through modes: ACCEL (real-time accelerometer), PRECISION (5-second statistical average), STATISTICS (detailed readout).',
+    tips:['ACCEL — fastest, good for most weights','PRECISION — averages 5 s, most accurate single reading','STATISTICS — shows standard deviation σ and min/max'],
+    accuracy:'PRECISION mode is best for a single critical reading'
+  },
+  btnUnits: {
+    icon:'📏', title:'UNITS',
+    desc:'Switches the display between grams (g) and ounces (oz). Calibration is stored in grams internally.',
+    tips:['g = grams (default)','oz = ounces  (1 oz = 28.35 g)'],
+    accuracy:null
+  },
+  btnPower: {
+    icon:'⚡', title:'POWER ON / OFF',
+    desc:'Turns the scale on and off. When powered on the scale auto-tares. Powering off and on resets the baseline — useful if the display has drifted.',
+    tips:['Power off when not in use to conserve battery','If display drifts significantly, power-cycle to re-tare','Thermal stability is best in the first few minutes after power-on'],
+    accuracy:null
+  },
+  btnHold: {
+    icon:'⏸', title:'HOLD / FREEZE DISPLAY',
+    desc:'Freezes the current reading on screen so you can remove the object and read the weight at your leisure.',
+    tips:['Wait for STABLE (STB LED green) before pressing HOLD','Press HOLD again to release the frozen reading','Combine with PRECISION mode for most accurate frozen result'],
+    accuracy:'Always wait for STABLE indicator before freezing'
+  },
+  btnCal: {
+    icon:'🎯', title:'CALIBRATE',
+    desc:'Opens the calibration wizard. A known-weight object teaches the scale how your specific phone and surface deflect. This is the single most important step for accuracy.',
+    tips:[
+      'Best combo: nickel (5.000g) + dollar bill (1.00g) for 2-point cal',
+      'Phone on mouse pad or 5+ layers of cloth — NOT hard table',
+      'Wait 5 min after unplugging charger before calibrating',
+      'Each additional cal point improves the curve fit',
+      'Recalibrate if you change surfaces or move to a new location'
+    ],
+    accuracy:'MOST IMPORTANT STEP — wrong cal = wrong readings no matter what'
+  },
+  btnVerify: {
+    icon:'✓', title:'VERIFY ACCURACY',
+    desc:'Measures a known reference weight and shows you the exact error in grams and percent. Also trains the internal accuracy engine.',
+    tips:['Nickel: 5.000g ±0.008g — best verifier','Penny: 2.500g ±0.013g','Quarter: 5.670g ±0.013g','Dollar bill: 1.00g ±0.03g','Do 3+ verifications to unlock maximum accuracy'],
+    accuracy:'Run after every recalibration to track real-world accuracy'
+  },
+  btnHammer: {
+    icon:'🔨', title:'VIBRATION ANALYSIS',
+    desc:'Triggers vibration-based resonance measurement. The phone vibrates and analyzes how the added weight shifts its resonant frequency — a physics-based cross-check of the accelerometer reading.',
+    tips:['Works best on a harder, flatter surface (opposite of accelerometer)','Use as a cross-check when accelerometer reading seems off','Requires vibration/haptics enabled on your device'],
+    accuracy:'Secondary sensor — cross-checks the primary accelerometer'
+  },
+  btnPrecision: {
+    icon:'🎯', title:'0.1g PRECISION MODE',
+    desc:'Takes a 5-second statistical measurement: collects many readings, rejects outliers, and returns the trimmed mean with a standard deviation σ. Best possible single-shot result.',
+    tips:[
+      'Keep phone COMPLETELY still for the full 5 seconds',
+      'Only meaningful after full calibration',
+      'The σ value in the result shows how stable your surface is',
+      'Place phone on dense foam for lowest σ'
+    ],
+    accuracy:'Highest accuracy mode — use for critical measurements'
+  },
+  btnLight: {
+    icon:'💡', title:'BACKLIGHT',
+    desc:'Toggles high-contrast display mode for low-light conditions.',
+    tips:['No effect on measurement accuracy'],
+    accuracy:null
+  },
+  btnStats: {
+    icon:'📊', title:'ACCURACY REPORT',
+    desc:'Full calibration audit: grade, precision estimate, systematic error, verification history, environmental status, and specific improvement recommendations.',
+    tips:[
+      'Grade A+ = ±0.1g · A = ±0.2g · B = ±0.3g · C = ±0.5g · D = ±1g',
+      'Check RECOMMENDATIONS section for actionable tips',
+      'Export saves full calibration data as JSON for debugging',
+      'Tap the ACCURACY display in the header for the full setup guide'
+    ],
+    accuracy:'Check after every recalibration'
+  }
+};
+
+/* ── Show / hide tooltip ───────────────────────────────── */
+function showTip(id) {
+  var d = BTN_HELP[id];
+  if (!d) return;
+  document.getElementById('tipIcon').textContent  = d.icon;
+  document.getElementById('tipTitle').textContent = d.title;
+  document.getElementById('tipDesc').textContent  = d.desc;
+  var ul = document.getElementById('tipList');
+  ul.innerHTML = (d.tips||[]).map(function(t){ return '<li>'+t+'</li>'; }).join('');
+  var ae = document.getElementById('tipAccuracy');
+  if (d.accuracy) { ae.textContent = '⚡ '+d.accuracy; ae.style.display='block'; }
+  else            { ae.style.display='none'; }
+  document.getElementById('btnTooltip').style.display = 'flex';
+  if (navigator.vibrate) navigator.vibrate(30);
+}
+function hideTip() {
+  document.getElementById('btnTooltip').style.display = 'none';
+}
+window._showBtnTip = showTip;
+window._hideBtnTip = hideTip;
+
+/* ── Attach long-press to every button that has help data ─ */
+var tipTimer = null;
+Object.keys(BTN_HELP).forEach(function(id) {
+  var btn = document.getElementById(id);
+  if (!btn) return;
+
+  function arm() {
+    if (tipTimer) clearTimeout(tipTimer);
+    tipTimer = setTimeout(function(){ tipTimer=null; showTip(id); }, 500);
+  }
+  function disarm() {
+    if (tipTimer) { clearTimeout(tipTimer); tipTimer=null; }
+  }
+
+  btn.addEventListener('touchstart',  arm,    { passive:true });
+  btn.addEventListener('touchend',    disarm, { passive:true });
+  btn.addEventListener('touchmove',   disarm, { passive:true });
+  btn.addEventListener('touchcancel', disarm, { passive:true });
+  btn.addEventListener('mousedown',   arm);
+  btn.addEventListener('mouseup',     disarm);
+  btn.addEventListener('mouseleave',  disarm);
+});
+
+/* ── Close tooltip ─────────────────────────────────────── */
+document.getElementById('btnTooltip').addEventListener('click', hideTip);
+var tc = document.getElementById('tipClose');
+if (tc) tc.addEventListener('click', function(e){ e.stopPropagation(); hideTip(); });
+
+/* ── Accuracy block → open guide ──────────────────────── */
+function openGuide() {
+  var g = document.getElementById('guideOverlay');
+  if (!g) return;
+  g.style.display = 'block';
+  setTimeout(function(){ g.classList.add('show'); }, 10);
+}
+function closeGuide() {
+  var g = document.getElementById('guideOverlay');
+  if (!g) return;
+  g.classList.remove('show');
+  setTimeout(function(){ g.style.display='none'; }, 300);
+}
+
+var ab = document.getElementById('accuracyBlock');
+if (ab) ab.addEventListener('click', openGuide);
+
+var gc  = document.getElementById('guideClose');
+var gcb = document.getElementById('guideCloseBtn');
+if (gc)  gc.addEventListener('click',  closeGuide);
+if (gcb) gcb.addEventListener('click', closeGuide);
+
+})();
+</script>
+
 <!-- ── Scripts ───────────────────────────────────────────── -->
-<script type="module" src="js/app.js?v=4.1.1"></script>
+<script type="module" src="js/app.js?v=4.2.0"></script>
 
 <!-- Service Worker Registration -->
 <script>
 (function() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/sw.js?v=4.1.1')
+      navigator.serviceWorker.register('/sw.js?v=4.2.0')
         .then(function(registration) {
           console.log('[SW] Registered:', registration.scope);
           
