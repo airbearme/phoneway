@@ -37,6 +37,16 @@ The app is already deployed and live at:
 
 ## For Developers: Deploying Updates
 
+### Safe Local Sync
+
+Use the repository sync command after authenticating GitHub as `airbearme`:
+
+```bash
+./scripts/sync-main.sh
+```
+
+It fetches and fast-forwards local `main`, then pushes local commits to GitHub. It stops if the branch has conflicts or uncommitted changes, so local work is never silently overwritten. The connected Vercel project deploys successful pushes to `main` automatically.
+
 ### Option 1: Manual Deploy (Quick)
 
 ```bash
