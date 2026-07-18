@@ -1,5 +1,5 @@
 /**
- * app.js — Phoneway Ultra-Precision Scale v4.1.1
+ * app.js — Phoneway Ultra-Precision Scale v4.1.2
  * 
  * Enhanced with:
  * - Multi-point calibration
@@ -37,7 +37,7 @@ const UNITS = [
   { key: 'oz', label: 'oz', factor: 0.035274, places: 3 },
 ];
 
-const APP_VERSION = '4.1.1';
+const APP_VERSION = '4.1.2';
 
 class PhonewayApp {
   constructor() {
