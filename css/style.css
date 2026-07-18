@@ -894,6 +894,28 @@ html, body {
 .cal-item:hover      { background: #202020; border-color: #444; }
 .cal-item.selected   { background: #1a1400; border-color: var(--gold); box-shadow: 0 0 8px rgba(201,162,39,.3); }
 
+.recal-weight-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.cal-choice {
+  min-height: 42px;
+  padding: 6px 4px;
+  color: #bbb;
+  background: #151515;
+  border: 1px solid #2a2a2a;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.cal-choice strong { display: block; color: var(--gold); margin-top: 3px; }
+.cal-choice.selected { color: #fff; border-color: var(--gold); background: #1a1400; }
+
 .cal-icon { font-size: 22px; }
 
 .cal-info strong {

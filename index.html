@@ -403,8 +403,8 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 ════════════════════════════════════════════════════════════ -->
 <div class="overlay" id="onboardModal">
   <div class="modal-card">
-    <div class="modal-title">CALIBRATE PHONEWAY</div>
-    <div class="modal-sub">ONE-TIME SETUP · KEEP A COIN HANDY</div>
+    <div class="modal-title">PRECISION SETUP</div>
+    <div class="modal-sub">REFERENCE-WEIGHT CALIBRATION · REQUIRED FOR ACCURACY</div>
 
     <div class="cal-tip-box">
       <p class="tip-headline">🎯 For 0.1 g accuracy — grab one of these:</p>
@@ -420,7 +420,7 @@ if (storedVersion && storedVersion !== APP_VERSION) {
       </p>
     </div>
 
-    <p class="modal-instr">Select your primary calibration weight:</p>
+    <p class="modal-instr">Select the exact reference you will place on the phone:</p>
     <div class="cal-weight-list"></div>
 
     <div class="custom-weight-row">
@@ -472,12 +472,13 @@ if (storedVersion && storedVersion !== APP_VERSION) {
 ════════════════════════════════════════════════════════════ -->
 <div class="overlay" id="calOverlay" style="display:none">
   <div class="modal-card">
-    <div class="modal-title">RECALIBRATE</div>
-    <div class="modal-sub">HAVE A NICKEL OR DOLLAR BILL READY</div>
+    <div class="modal-title">PRECISION CALIBRATION</div>
+    <div class="modal-sub">SELECT A REFERENCE WEIGHT</div>
     <p style="font-size:9px;line-height:1.8;color:#888;letter-spacing:1px;margin-bottom:16px">
       Two-point calibration using everyday objects gives you ±0.1–0.5 g accuracy.
       A nickel (5.0 g) + dollar bill (1.0 g) is the recommended combination.
     </p>
+    <div id="recalWeightList" class="recal-weight-list"></div>
     <div class="modal-btns">
       <button class="modal-btn modal-btn-primary" id="calConfirmBtn">PROCEED</button>
       <button class="modal-btn modal-btn-secondary" id="calCancelBtn">CANCEL</button>

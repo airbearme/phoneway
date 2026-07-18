@@ -113,6 +113,11 @@ class PhonewayApp {
       this._bindButtons();
       this._buildCalWeightList();
       this._buildVerifyPanel();
+
+      // New devices need an explicit reference-weight calibration before use.
+      if (!this.scale.calibrated) {
+        setTimeout(() => this._showOnboarding(), 1000);
+      }
       
       console.log('[Phoneway] UI initialized, binding buttons...');
       
@@ -536,6 +541,15 @@ class PhonewayApp {
 
   _showCalModal() {
     const modal = document.getElementById('calOverlay');
+    if (modal) {
+      this._buildRecalWeightList();
+      modal.style.display = 'flex';
+    }
+  }
+
+  _showOnboarding() {
+    if (this.scale.calibrated) return;
+    const modal = document.getElementById('onboardModal');
     if (modal) modal.style.display = 'flex';
   }
 
@@ -599,6 +613,25 @@ class PhonewayApp {
         container.querySelectorAll('.cal-item').forEach(e => e.classList.remove('selected'));
         item.classList.add('selected');
         this.calWeightG = w.grams;
+      });
+      container.appendChild(item);
+    });
+  }
+
+  _buildRecalWeightList() {
+    const container = document.getElementById('recalWeightList');
+    if (!container) return;
+
+    container.innerHTML = '';
+    getRecommendedWeights().slice(0, 3).forEach((weight, index) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'cal-choice' + (index === 0 ? ' selected' : '');
+      item.innerHTML = `${weight.icon} ${weight.name} <strong>${weight.grams} g</strong>`;
+      item.addEventListener('click', () => {
+        container.querySelectorAll('.cal-choice').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+        this.calWeightG = weight.grams;
       });
       container.appendChild(item);
     });

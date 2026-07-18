@@ -337,6 +337,8 @@ class SimpleScale {
     this.displayWeight = 0;
     this.confidence   = 0;
     this.isStable     = false;
+    this.motionQuality = 0;
+    this.motionBlocked = false;
 
     // Signed-delta MAs — the key to eliminating Rayleigh bias
     this.maDx = new MovingAverage(80);
@@ -425,11 +427,25 @@ class SimpleScale {
       z: this.kalmanZ.update(z)
     };
 
+    // Reject impulsive movement and rotation before it can look like weight.
+    const jerk = Math.hypot(
+      x - this.filteredAccel.x,
+      y - this.filteredAccel.y,
+      z - this.filteredAccel.z
+    );
+    const rotationRate = e.rotationRate
+      ? Math.hypot(e.rotationRate.alpha || 0, e.rotationRate.beta || 0, e.rotationRate.gamma || 0)
+      : 0;
+    const jerkQuality = Math.max(0, 1 - jerk / 0.35);
+    const rotationQuality = Math.max(0, 1 - rotationRate / 45);
+    this.motionQuality = jerkQuality * rotationQuality;
+    this.motionBlocked = jerk > 0.45 || rotationRate > 35;
+
     // Event-driven tare: collect Kalman-filtered samples after warmup
     if (this._tare_in_progress) {
       if (this._tare_warmup_count < this._tare_warmup) {
         this._tare_warmup_count++;
-      } else {
+      } else if (!this.motionBlocked) {
         this._tare_xs.push(this.filteredAccel.x);
         this._tare_ys.push(this.filteredAccel.y);
         this._tare_zs.push(this.filteredAccel.z);
@@ -463,6 +479,14 @@ class SimpleScale {
 
   _process() {
     if (!this.baseline) return;
+
+    if (this.motionBlocked) {
+      this.isStable = false;
+      this.stableCounter = 0;
+      this.confidence = 0;
+      if (this.onWeight) this.onWeight(this.displayWeight, this.confidence, false);
+      return;
+    }
 
     const dx = this.filteredAccel.x - this.baseline.x;
     const dy = this.filteredAccel.y - this.baseline.y;
@@ -513,7 +537,7 @@ class SimpleScale {
     const calMult        = !this.calibrated ? 0.35 :
                            (calPoints >= 3 ? 1.0 : calPoints >= 2 ? 0.85 : 0.70);
 
-    this.confidence = (stabilityScore * 0.50 + signalScore * 0.20 + surfaceScore * 0.30) * calMult;
+    this.confidence = (stabilityScore * 0.45 + signalScore * 0.20 + surfaceScore * 0.25 + this.motionQuality * 0.10) * calMult;
 
     if (this.onWeight) this.onWeight(this.displayWeight, this.confidence, this.isStable);
   }
