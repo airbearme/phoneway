@@ -139,7 +139,7 @@ class ParticleFilterFusion {
    */
   getConfidenceInterval(confidence = 0.95) {
     // Sort particles by value
-    const indexed = this.particles.map((v, i) => ({ v, w: this.weights[i] }));
+    const indexed = Array.from(this.particles, (v, i) => ({ v, w: this.weights[i] }));
     indexed.sort((a, b) => a.v - b.v);
     
     // Find interval containing confidence% of weight

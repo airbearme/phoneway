@@ -106,12 +106,16 @@ class UltraPrecisionMeasurement {
     
     // Robust statistics using median absolute deviation
     const median = this._median(values);
-    const mad = this._median(values.map(v => Math.abs(v - median)));
-    const stdDev = mad * 1.4826; // Convert MAD to SD for normal distribution
+    const deviations = values.map(v => Math.abs(v - median));
+    const mad = this._median(deviations);
+    // A zero MAD is valid for a stable signal, but cannot define a filter width.
+    const stdDev = mad > 0 ? mad * 1.4826 : this._stdDev(values);
+    const outlierThreshold = Math.max(2 * mad, stdDev * 2, Number.EPSILON);
     
     // Mean of inliers only (within 2 MAD)
-    const inliers = usable.filter(s => Math.abs(s.grams - median) < 2 * mad);
-    const meanGrams = inliers.reduce((a, s) => a + s.grams, 0) / inliers.length;
+    const inliers = usable.filter(s => Math.abs(s.grams - median) <= outlierThreshold);
+    const accepted = inliers.length > 0 ? inliers : usable;
+    const meanGrams = accepted.reduce((a, s) => a + s.grams, 0) / accepted.length;
     
     // Confidence calculation
     const avgQuality = usable.reduce((a, s) => a + s.quality, 0) / usable.length;
@@ -131,8 +135,8 @@ class UltraPrecisionMeasurement {
       allanDeviation: allanDev,
       confidence: Math.min(0.98, confidence),
       samples: usable.length,
-      inliers: inliers.length,
-      outliers: usable.length - inliers.length,
+      inliers: accepted.length,
+      outliers: usable.length - accepted.length,
       min: Math.min(...values),
       max: Math.max(...values),
       range: Math.max(...values) - Math.min(...values)
