@@ -699,6 +699,10 @@ class PhonewayApp {
     
     try {
       const result = await this.scale.measurePrecision(5000);
+
+      if (!result.sampleCount || result.confidence <= 0 || !Number.isFinite(result.grams)) {
+        throw new Error('Keep the phone still until a stable reading is available');
+      }
       
       this._precisionMode = false;
       this.currentG = result.grams;

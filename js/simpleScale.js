@@ -339,6 +339,7 @@ class SimpleScale {
     this.isStable     = false;
     this.motionQuality = 0;
     this.motionBlocked = false;
+    this.gravityQuality = 0;
 
     // Signed-delta MAs — the key to eliminating Rayleigh bias
     this.maDx = new MovingAverage(80);
@@ -438,8 +439,17 @@ class SimpleScale {
       : 0;
     const jerkQuality = Math.max(0, 1 - jerk / 0.35);
     const rotationQuality = Math.max(0, 1 - rotationRate / 45);
-    this.motionQuality = jerkQuality * rotationQuality;
-    this.motionBlocked = jerk > 0.45 || rotationRate > 35;
+    const gravityMagnitude = Math.hypot(
+      this.filteredAccel.x,
+      this.filteredAccel.y,
+      this.filteredAccel.z
+    );
+    const gravityError = Math.abs(gravityMagnitude - 9.80665);
+    this.gravityQuality = gravityMagnitude > 1
+      ? Math.max(0, 1 - gravityError / 0.5)
+      : 0;
+    this.motionQuality = jerkQuality * rotationQuality * this.gravityQuality;
+    this.motionBlocked = jerk > 0.45 || rotationRate > 35 || gravityError > 0.5;
 
     // Event-driven tare: collect Kalman-filtered samples after warmup
     if (this._tare_in_progress) {
@@ -605,8 +615,14 @@ class SimpleScale {
   }
 
   calibrate(knownGrams) {
+    if (!Number.isFinite(knownGrams) || knownGrams <= 0) {
+      return { success: false, error: 'Choose a valid reference weight' };
+    }
     if (!this.baseline)   return { success: false, error: 'Must tare first' };
     if (!this.isStable)   return { success: false, error: 'Wait for stable reading' };
+    if (this.motionBlocked || this.motionQuality < 0.5) {
+      return { success: false, error: 'Hold the phone completely still' };
+    }
     if (!this.maDx.isFull) return { success: false, error: 'Still settling — wait a moment' };
 
     // Use filtered, averaged deltas for maximum accuracy
@@ -618,7 +634,9 @@ class SimpleScale {
       return { success: false, error: 'Signal too weak - use softer surface or heavier weight' };
     }
 
-    this.multiCal.addPoint(knownGrams, deltaA);
+    if (!this.multiCal.addPoint(knownGrams, deltaA)) {
+      return { success: false, error: 'Calibration signal was invalid - try again' };
+    }
 
     const newSensitivity = knownGrams / deltaA;
     this.sensitivity = this.calibrated
@@ -718,15 +736,22 @@ class SimpleScale {
     
     return new Promise((resolve) => {
       const interval = setInterval(() => {
-        readings.push({
-          grams: this.rawWeight,
-          time: Date.now() - startTime
-        });
+        if (!this.motionBlocked && this.motionQuality >= 0.5 && this.isStable) {
+          readings.push({
+            grams: this.rawWeight,
+            time: Date.now() - startTime
+          });
+        }
         
         if (Date.now() - startTime >= durationMs) {
           clearInterval(interval);
           
           // Statistical analysis
+          if (readings.length < 10) {
+            resolve({ grams: 0, stdDev: Infinity, confidence: 0, sampleCount: readings.length });
+            return;
+          }
+
           const values = readings.map(r => r.grams);
           values.sort((a, b) => a - b);
           
